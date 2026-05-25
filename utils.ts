@@ -28,17 +28,23 @@ export const formatCurrency = (value: number): string => {
 };
 
 export const inferStatus = (item: any): any => {
-  const notes = (item.Comentários || '').toLowerCase();
-  const appointment = item["Data Primeira Consulta"];
+  const notes = String(item.Comentários || item.Comentarios || '').toLowerCase();
+  const appointment = item["Data Primeira Consulta"] || item.DataConsulta;
+  const estado = String(item.Estado || item.estado || item.Status || '').toLowerCase();
+  const hasValue = parseFloat(String(item["Valor Real Bruto"] || item.Valor || '0').replace(',', '.')) > 0;
   
-  if ((appointment && appointment.length > 2) || notes.includes('marcado')) {
+  if (estado.includes('pago') || estado.includes('paid')) return 'paid';
+  if (estado.includes('fechado') || estado.includes('completed') || hasValue) return 'completed';
+  if ((appointment && String(appointment).length > 2) || notes.includes('marcado') || estado.includes('agend')) {
     return 'scheduled';
   }
   
-  const discardKeywords = ['engano', 'não atende', 'não interessa', 'desligou', 'longe', 'errado', 'não precisa', 'incorrecto', 'falecido'];
-  if (discardKeywords.some(key => notes.includes(key))) {
+  const discardKeywords = ['engano', 'não atende', 'nao atende', 'não interessa', 'nao interessa', 'desligou', 'longe', 'errado', 'incorrecto', 'falecido'];
+  if (estado.includes('não interessada') || estado.includes('nao interessada') || discardKeywords.some(key => notes.includes(key))) {
     return 'discarded';
   }
   
+  if (item["Data Contacto"] || item["Responsável"] || item.Responsavel || estado.includes('contact')) return 'contacted';
+
   return 'new';
 };

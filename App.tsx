@@ -11,9 +11,10 @@ import { AppView, Lead, AdminSettings, LeadUpdatePayload } from './types';
 import { formatMonthYear, getLeadsByMonth, inferStatus } from './utils';
 import { MOCK_LEADS_DATA } from './constants';
 
-const WEBHOOK_URL = 'https://n8n.evob.org/webhook/997a304a-2dc7-4c4e-b935-bd19ce7f87de';
-const UPDATE_WEBHOOK_URL = 'https://n8n.evob.org/webhook/2f28ed96-5ed8-48af-b009-1d519cf07f9b';
-const REMINDER_WEBHOOK_URL = 'https://n8n.evob.org/webhook/reminder-email-gosmile'; // URL sugerida para lembretes
+const WEBHOOK_URL = import.meta.env.VITE_LEADS_FETCH_URL || 'https://n8n.evob.org/webhook/997a304a-2dc7-4c4e-b935-bd19ce7f87de';
+const UPDATE_WEBHOOK_URL = import.meta.env.VITE_LEADS_UPDATE_URL || 'https://n8n.evob.org/webhook/2f28ed96-5ed8-48af-b009-1d519cf07f9b';
+const REMINDER_WEBHOOK_URL = import.meta.env.VITE_LEADS_REMINDER_URL || 'https://n8n.evob.org/webhook/reminder-email-gosmile';
+const IS_LOCAL_PREVIEW = ['localhost', '127.0.0.1'].includes(window.location.hostname);
 
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<AppView>('resumo');
@@ -29,39 +30,37 @@ const App: React.FC = () => {
 
   const mapDataToLeads = (data: any[]): Lead[] => {
     return data
-      .filter(item => item.Data && item.Data.length > 8 && item.Data !== 'z')
+      .filter(item => item.Data && String(item.Data).length > 3 && item.Data !== 'z')
       .map((item: any) => {
         let timestamp: string;
         try {
-          const parts = item.Data.split(' ');
-          const dateParts = parts[0].split('-');
-          const timeParts = parts[1] ? parts[1].split(':') : ['00', '00', '00'];
-          const localDate = new Date(
-            parseInt(dateParts[0]), 
-            parseInt(dateParts[1]) - 1, 
-            parseInt(dateParts[2]),
-            parseInt(timeParts[0]),
-            parseInt(timeParts[1]),
-            parseInt(timeParts[2] || '0')
-          );
-          timestamp = localDate.toISOString();
+          const rawDate = String(item.Data).trim();
+          const [datePart, timePart = '00:00:00'] = rawDate.split(/\s+/);
+          const sep = datePart.includes('/') ? '/' : '-';
+          const dateParts = datePart.split(sep).map((part: string) => parseInt(part, 10));
+          const [hours = 0, minutes = 0, seconds = 0] = timePart.split(':').map((part: string) => parseInt(part, 10));
+          const [year, month, day] = dateParts[0] > 31
+            ? [dateParts[0], dateParts[1], dateParts[2]]
+            : [dateParts[2], dateParts[1], dateParts[0]];
+          const localDate = new Date(year, month - 1, day, hours, minutes, seconds || 0);
+          timestamp = isNaN(localDate.getTime()) ? new Date().toISOString() : localDate.toISOString();
         } catch (e) {
           timestamp = new Date().toISOString();
         }
         
         return {
-          id: String(item.row_number || Math.random()),
-          externalId: String(item.row_number || '0'),
-          name: String(item.Nome || 'Sem Nome'),
-          phone: String(item.Telefone || ''),
+          id: String(item.row_number || item.Row || item.ID || Math.random()),
+          externalId: String(item.row_number || item.Row || item.ID || '0'),
+          name: String(item.Nome || item.Name || 'Sem Nome'),
+          phone: String(item.Telefone || item.Phone || ''),
           email: item.Email || '',
           timestamp: timestamp,
           status: inferStatus(item),
-          isContacted: !!(item["Data Contacto"] || item["Responsável"]),
-          notes: item.Comentários || '',
-          doctor: item.Médico || '',
-          appointmentDate: item["Data Primeira Consulta"] || '',
-          value: parseFloat(item["Valor Real Bruto"]) || 0
+          isContacted: !!(item["Data Contacto"] || item["Responsável"] || item.Responsavel),
+          notes: item.Comentários || item.Comentarios || '',
+          doctor: item.Médico || item.Medico || '',
+          appointmentDate: item["Data Primeira Consulta"] || item.DataConsulta || '',
+          value: parseFloat(String(item["Valor Real Bruto"] || item.Valor || '0').replace(',', '.')) || 0
         };
       });
   };
@@ -72,7 +71,12 @@ const App: React.FC = () => {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
-      const response = await fetch(WEBHOOK_URL, { signal: controller.signal });
+      const response = await fetch(settings.dataUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
+        body: JSON.stringify({ action: 'list_leads' })
+      });
       clearTimeout(timeoutId);
 
       if (response.ok) {
@@ -84,12 +88,15 @@ const App: React.FC = () => {
       }
       throw new Error("Erro de rede");
     } catch (error) {
-      setFetchError("Modo Offline");
-      if (leads.length === 0) setLeads(mapDataToLeads(MOCK_LEADS_DATA));
+      const offlineMessage = error instanceof Error && error.name === 'AbortError'
+        ? 'Tempo de ligação esgotado'
+        : 'Sem ligação à folha';
+      setFetchError(offlineMessage);
+      if (leads.length === 0 && IS_LOCAL_PREVIEW) setLeads(mapDataToLeads(MOCK_LEADS_DATA));
     } finally {
       setIsLoading(false);
     }
-  }, [leads.length]);
+  }, [leads.length, settings.dataUrl]);
 
   useEffect(() => {
     fetchLeads();
