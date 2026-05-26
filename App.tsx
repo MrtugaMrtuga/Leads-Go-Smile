@@ -28,40 +28,38 @@ const App: React.FC = () => {
   });
 
   const mapDataToLeads = (data: any[]): Lead[] => {
+    const parseTimestamp = (item: any): string => {
+      const raw = item.Data || item.created_at || item.timestamp || item.date;
+      if (!raw) return new Date().toISOString();
+
+      try {
+        // Suporta ISO e também formato "YYYY-MM-DD HH:mm:ss"
+        const normalized = String(raw).includes('T') ? String(raw) : String(raw).replace(' ', 'T');
+        const d = new Date(normalized);
+        if (!isNaN(d.getTime())) return d.toISOString();
+      } catch (_) {}
+
+      return new Date().toISOString();
+    };
+
     return data
-      .filter(item => item.Data && item.Data.length > 8 && item.Data !== 'z')
-      .map((item: any) => {
-        let timestamp: string;
-        try {
-          const parts = item.Data.split(' ');
-          const dateParts = parts[0].split('-');
-          const timeParts = parts[1] ? parts[1].split(':') : ['00', '00', '00'];
-          const localDate = new Date(
-            parseInt(dateParts[0]), 
-            parseInt(dateParts[1]) - 1, 
-            parseInt(dateParts[2]),
-            parseInt(timeParts[0]),
-            parseInt(timeParts[1]),
-            parseInt(timeParts[2] || '0')
-          );
-          timestamp = localDate.toISOString();
-        } catch (e) {
-          timestamp = new Date().toISOString();
-        }
-        
+      .filter((item: any) => !!(item?.Data || item?.created_at || item?.timestamp || item?.date || item?.name || item?.Nome))
+      .map((item: any, index: number) => {
+        const externalId = String(item.row_number || item.id || item.lead_id || index + 1);
+
         return {
-          id: String(item.row_number || Math.random()),
-          externalId: String(item.row_number || '0'),
-          name: String(item.Nome || 'Sem Nome'),
-          phone: String(item.Telefone || ''),
-          email: item.Email || '',
-          timestamp: timestamp,
+          id: externalId,
+          externalId,
+          name: String(item.Nome || item.name || 'Sem Nome'),
+          phone: String(item.Telefone || item.phone || ''),
+          email: item.Email || item.email || '',
+          timestamp: parseTimestamp(item),
           status: inferStatus(item),
-          isContacted: !!(item["Data Contacto"] || item["Responsável"]),
-          notes: item.Comentários || '',
-          doctor: item.Médico || '',
-          appointmentDate: item["Data Primeira Consulta"] || '',
-          value: parseFloat(item["Valor Real Bruto"]) || 0
+          isContacted: !!(item['Data Contacto'] || item['Responsável'] || item.contacted_at || item.contacted_by),
+          notes: item.Comentários || item.message || item.notes || '',
+          doctor: item.Médico || item.medico || item.doctor || '',
+          appointmentDate: item['Data Primeira Consulta'] || item.data_consulta || item.appointment_date || '',
+          value: Number(item['Valor Real Bruto'] || item.valor_fechado || item.value || 0) || 0
         };
       });
   };
@@ -72,7 +70,7 @@ const App: React.FC = () => {
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
-      const response = await fetch(WEBHOOK_URL, { signal: controller.signal });
+      const response = await fetch(settings.dataUrl || WEBHOOK_URL, { signal: controller.signal });
       clearTimeout(timeoutId);
 
       if (response.ok) {
@@ -89,7 +87,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [leads.length]);
+  }, [leads.length, settings.dataUrl]);
 
   useEffect(() => {
     fetchLeads();
@@ -108,7 +106,9 @@ const App: React.FC = () => {
     try {
       const payload: LeadUpdatePayload = {
         row_number: lead.externalId,
+        lead_id: lead.externalId,
         nome: lead.name,
+        name: lead.name,
         status: updates.status || lead.status,
         estado: extraData?.estado,
         comentario: extraData?.comentario || updates.notes,

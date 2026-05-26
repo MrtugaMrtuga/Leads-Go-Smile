@@ -28,17 +28,31 @@ export const formatCurrency = (value: number): string => {
 };
 
 export const inferStatus = (item: any): any => {
-  const notes = (item.Comentários || '').toLowerCase();
-  const appointment = item["Data Primeira Consulta"];
-  
-  if ((appointment && appointment.length > 2) || notes.includes('marcado')) {
+  const rawStatus = String(item.status || item.estado || '').toLowerCase();
+  const notes = String(item.Comentários || item.message || item.notes || '').toLowerCase();
+  const appointment = item['Data Primeira Consulta'] || item.data_consulta || item.appointment_date;
+
+  // Respeita status explícito quando vem da nova tabela
+  if (['paid', 'completed', 'positive', 'scheduled', 'discarded', 'contacted', 'new'].includes(rawStatus)) {
+    return rawStatus;
+  }
+
+  if ((appointment && String(appointment).length > 2) || notes.includes('marcado') || notes.includes('marcada')) {
     return 'scheduled';
   }
-  
-  const discardKeywords = ['engano', 'não atende', 'não interessa', 'desligou', 'longe', 'errado', 'não precisa', 'incorrecto', 'falecido'];
-  if (discardKeywords.some(key => notes.includes(key))) {
+
+  const discardKeywords = [
+    'engano', 'não atende', 'nao atende', 'não interessa', 'nao interessa',
+    'desligou', 'longe', 'errado', 'não precisa', 'nao precisa', 'incorrecto', 'falecido'
+  ];
+
+  if (discardKeywords.some((key) => notes.includes(key))) {
     return 'discarded';
   }
-  
+
+  if (notes.includes('contactado') || notes.includes('contatado') || notes.includes('ligar')) {
+    return 'contacted';
+  }
+
   return 'new';
 };

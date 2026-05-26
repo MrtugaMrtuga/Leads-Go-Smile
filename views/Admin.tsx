@@ -118,8 +118,8 @@ const Admin: React.FC<AdminProps> = ({ settings, onUpdateSettings, leads, onUpda
               <input
                 type="text"
                 value={settings.dataUrl}
-                readOnly
-                className="w-full h-14 bg-[#F8F9FB] rounded-2xl px-6 font-medium text-[10px] text-gray-500 outline-none"
+                onChange={(e) => onUpdateSettings({ ...settings, dataUrl: e.target.value })}
+                className="w-full h-14 bg-[#F8F9FB] rounded-2xl px-6 font-medium text-[10px] text-gray-500 outline-none border border-transparent focus:border-blue-100"
               />
             </div>
           </div>

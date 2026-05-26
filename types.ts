@@ -26,7 +26,9 @@ export interface AdminSettings {
 
 export interface LeadUpdatePayload {
   row_number: string;
-  nome: string; // Identificador Único (Coluna C)
+  nome: string; // Compatibilidade fluxo antigo
+  name?: string; // Compatibilidade tabela nova
+  lead_id?: string;
   estado?: string;
   comentario?: string;
   medico?: string;
