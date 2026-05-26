@@ -11,7 +11,7 @@ import { AppView, Lead, AdminSettings, LeadUpdatePayload } from './types';
 import { formatMonthYear, getLeadsByMonth, inferStatus } from './utils';
 import { MOCK_LEADS_DATA } from './constants';
 
-const WEBHOOK_URL = 'https://n8n.evob.org/webhook/997a304a-2dc7-4c4e-b935-bd19ce7f87de';
+const WEBHOOK_URL = 'https://n8n.evob.org/webhook/LandingPage';
 const UPDATE_WEBHOOK_URL = 'https://n8n.evob.org/webhook/2f28ed96-5ed8-48af-b009-1d519cf07f9b';
 const REMINDER_WEBHOOK_URL = 'https://n8n.evob.org/webhook/reminder-email-gosmile'; // URL sugerida para lembretes
 
