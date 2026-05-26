@@ -12,6 +12,7 @@ import { formatMonthYear, getLeadsByMonth, inferStatus } from './utils';
 import { MOCK_LEADS_DATA } from './constants';
 
 const WEBHOOK_URL = 'https://n8n.evob.org/webhook/LandingPage';
+const READ_WEBHOOK_FALLBACK_URL = 'https://n8n.evob.org/webhook/997a304a-2dc7-4c4e-b935-bd19ce7f87de';
 const UPDATE_WEBHOOK_URL = 'https://n8n.evob.org/webhook/2f28ed96-5ed8-48af-b009-1d519cf07f9b';
 const REMINDER_WEBHOOK_URL = 'https://n8n.evob.org/webhook/reminder-email-gosmile'; // URL sugerida para lembretes
 
@@ -68,9 +69,11 @@ const App: React.FC = () => {
     setIsLoading(true);
     setFetchError(null);
     try {
+      const sourceUrl = settings.dataUrl || WEBHOOK_URL;
+
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 8000);
-      const response = await fetch(settings.dataUrl || WEBHOOK_URL, { signal: controller.signal });
+      const response = await fetch(sourceUrl, { signal: controller.signal });
       clearTimeout(timeoutId);
 
       if (response.ok) {
@@ -80,6 +83,18 @@ const App: React.FC = () => {
           return;
         }
       }
+
+      // Fallback de leitura: o webhook /LandingPage é de intake (escrita) e pode não devolver lista.
+      const fallbackResponse = await fetch(READ_WEBHOOK_FALLBACK_URL);
+      if (fallbackResponse.ok) {
+        const fallbackData = await fallbackResponse.json();
+        if (Array.isArray(fallbackData)) {
+          setLeads(mapDataToLeads(fallbackData));
+          setFetchError("Leitura em fallback (endpoint novo sem API de leitura)");
+          return;
+        }
+      }
+
       throw new Error("Erro de rede");
     } catch (error) {
       setFetchError("Modo Offline");
