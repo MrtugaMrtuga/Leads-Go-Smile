@@ -19,5 +19,5 @@ jobs:
         run: |
           PORT=3040 NODE_ENV=production node server/index.js &
           sleep 1
-          curl -sf http://127.0.0.1:3040/api/health | grep eVault
+          curl -sf http://127.0.0.1:3040/api/health | grep leads.evob.org
           curl -sf http://127.0.0.1:3040/api/leads | grep Ana
