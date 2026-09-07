@@ -30,7 +30,47 @@ const ALLOWED_STATUSES = new Set([
   'paid',
 ]);
 
-function sanitizeLeadInput(body = {}) {
+const ESTADO_TO_STATUS = {
+  pago: 'paid',
+  fechado: 'completed',
+  'não interessada': 'discarded',
+  'nao interessada': 'discarded',
+  faltou: 'contacted',
+};
+
+function normalizeBody(body = {}) {
+  const name = body.name ?? body.Nome ?? body.nome;
+  const phone = body.phone ?? body.Telefone ?? body.telefone;
+  const email = body.email ?? body.Email;
+  const notes = body.notes ?? body.Comentários ?? body.comentario ?? body.message;
+  const doctor = body.doctor ?? body.Médico ?? body.medico;
+  const appointmentDate = body.appointmentDate ?? body['Data Primeira Consulta'] ?? body.data_consulta;
+  const timestamp = body.timestamp ?? body.Data ?? body.created_at ?? body.date;
+  const value = body.value ?? body['Valor Real Bruto'] ?? body.valor_fechado;
+  const source = body.source ?? body.Origem;
+  const rawStatus = body.status ?? body.estado;
+  const status = rawStatus
+    ? ESTADO_TO_STATUS[String(rawStatus).toLowerCase()] || rawStatus
+    : undefined;
+
+  const out = { ...body };
+  if (name !== undefined) out.name = name;
+  if (phone !== undefined) out.phone = phone;
+  if (email !== undefined) out.email = email;
+  if (notes !== undefined) out.notes = notes;
+  if (doctor !== undefined) out.doctor = doctor;
+  if (appointmentDate !== undefined) out.appointmentDate = appointmentDate;
+  if (timestamp !== undefined) out.timestamp = timestamp;
+  if (value !== undefined) out.value = value;
+  if (source !== undefined) out.source = source;
+  if (status !== undefined) out.status = status;
+  if (body.isContacted !== undefined) out.isContacted = Boolean(body.isContacted);
+  else if (body['Data Contacto'] || body['Responsável']) out.isContacted = true;
+  return out;
+}
+
+function sanitizeLeadInput(raw = {}) {
+  const body = normalizeBody(raw);
   const out = {};
   if (body.name !== undefined) out.name = String(body.name);
   if (body.phone !== undefined) out.phone = String(body.phone);
@@ -88,12 +128,15 @@ export function createApiRouter() {
     res.status(201).json(lead);
   });
 
-  api.patch('/leads/:id', async (req, res) => {
+  async function patchLead(req, res) {
     const updates = sanitizeLeadInput(req.body);
     const lead = await updateLead(req.params.id, updates);
     if (!lead) return res.status(404).json({ error: 'Lead não encontrada' });
     res.json(lead);
-  });
+  }
+
+  api.patch('/leads/:id', patchLead);
+  api.put('/leads/:id', patchLead);
 
   api.delete('/leads/:id', async (req, res) => {
     const ok = await deleteLead(req.params.id);

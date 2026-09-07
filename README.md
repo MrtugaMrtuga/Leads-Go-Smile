@@ -27,7 +27,7 @@ npm run build
 PORT=3040 npm start
 ```
 
-O servidor Express serve `dist/` e `/api` na mesma porta. Ver [DEPLOY.md](./DEPLOY.md) para launchd, Caddy e o domínio `id.evault.org`.
+O servidor Express serve `dist/` e `/api` na mesma porta. Ver [DEPLOY.md](./DEPLOY.md) para launchd, **Cloudflare Tunnel** (`id.evault.org`) e Caddy.
 
 ## API
 
@@ -37,7 +37,7 @@ O servidor Express serve `dist/` e `/api` na mesma porta. Ver [DEPLOY.md](./DEPL
 | GET | `/api/leads` | Lista leads |
 | POST | `/api/leads` | Cria lead (`name` obrigatório) |
 | GET | `/api/leads/:id` | Lê uma lead |
-| PATCH | `/api/leads/:id` | Actualiza lead |
+| PATCH / PUT | `/api/leads/:id` | Actualiza lead (também aceita campos PT: Nome, Telefone, …) |
 | DELETE | `/api/leads/:id` | Apaga lead |
 | GET / PUT | `/api/settings` | Comissão local |
 | GET / POST | `/api/reminders` | Lembretes só em disco (sem email) |

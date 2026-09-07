@@ -46,9 +46,37 @@ launchctl load ~/Library/LaunchAgents/org.evault.leads.plist
 
 Logs: `/tmp/evault-leads.out.log` e `/tmp/evault-leads.err.log`.
 
-## 5. HTTPS em id.evault.org (Caddy)
+## 5. HTTPS em id.evault.org
 
-Aponte o DNS de `id.evault.org` para o Mini. Exemplo Caddyfile:
+A app escuta só em `127.0.0.1:3040`. Exponha o domínio com **Cloudflare Tunnel** (recomendado no Mini) ou Caddy.
+
+### Cloudflare Tunnel
+
+```bash
+brew install cloudflared
+cloudflared tunnel login
+cloudflared tunnel create evault-leads
+cloudflared tunnel route dns evault-leads id.evault.org
+```
+
+`~/.cloudflared/config.yml`:
+
+```yaml
+tunnel: evault-leads
+credentials-file: /Users/SEU_USER/.cloudflared/<TUNNEL_ID>.json
+ingress:
+  - hostname: id.evault.org
+    service: http://127.0.0.1:3040
+  - service: http_status:404
+```
+
+```bash
+cloudflared tunnel run evault-leads
+```
+
+O frontend continua em same-origin `/api` — o túnel não muda URLs.
+
+### Caddy (alternativa se o Mini tiver IP público)
 
 ```
 id.evault.org {
@@ -62,7 +90,7 @@ brew install caddy
 sudo caddy start --config /usr/local/etc/Caddyfile
 ```
 
-Firewall: só 80/443 públicos; 3040 fica em localhost se usar o proxy.
+Firewall: só 80/443 públicos; 3040 fica em localhost se usar proxy ou túnel.
 
 ## 6. PWA
 
