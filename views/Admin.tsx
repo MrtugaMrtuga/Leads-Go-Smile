@@ -5,8 +5,8 @@ import { Lead } from '../types';
 import { formatCurrency } from '../utils';
 
 interface AdminProps {
-  settings: { commissionPercent: number, dataUrl: string };
-  onUpdateSettings: (newSettings: any) => void;
+  settings: { commissionPercent: number };
+  onUpdateSettings: (newSettings: { commissionPercent: number }) => void;
   leads: Lead[];
   onUpdateStatus: (id: string, updates: Partial<Lead>, extraData?: any) => void;
 }
@@ -95,7 +95,7 @@ const Admin: React.FC<AdminProps> = ({ settings, onUpdateSettings, leads, onUpda
               <div className="p-3 bg-blue-50 rounded-2xl text-blue-600"><Users size={20} /></div>
               <div>
                 <h3 className="text-lg font-bold text-slate-800">Comissões</h3>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Angariação Go Smile</p>
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-tight">Angariação eVault Leads</p>
               </div>
             </div>
 
@@ -114,13 +114,11 @@ const Admin: React.FC<AdminProps> = ({ settings, onUpdateSettings, leads, onUpda
             </div>
 
             <div className="pt-4 border-t border-slate-50">
-              <label className="text-[10px] font-bold text-[#A0AEC0] uppercase tracking-widest block mb-3">N8N Webhook Endpoint</label>
-              <input
-                type="text"
-                value={settings.dataUrl}
-                onChange={(e) => onUpdateSettings({ ...settings, dataUrl: e.target.value })}
-                className="w-full h-14 bg-[#F8F9FB] rounded-2xl px-6 font-medium text-[10px] text-gray-500 outline-none border border-transparent focus:border-blue-100"
-              />
+              <label className="text-[10px] font-bold text-[#A0AEC0] uppercase tracking-widest block mb-3">Armazenamento</label>
+              <div className="w-full min-h-14 bg-[#F8F9FB] rounded-2xl px-6 py-4 font-medium text-[11px] text-gray-600 border border-transparent">
+                JSON local em <span className="font-bold">./data</span> · API same-origin <span className="font-bold">/api</span>
+                <span className="block text-[10px] text-slate-400 mt-1 uppercase tracking-widest">id.evault.org · Mac Mini</span>
+              </div>
             </div>
           </div>
 

@@ -5,12 +5,13 @@ import { RefreshCw } from 'lucide-react';
 
 interface TrashProps {
   leads: Lead[];
+  onUpdateStatus: (id: string, updates: Partial<Lead>, extraData?: any) => void;
   onSync: () => void;
   monthLabel: string;
   isSyncing?: boolean;
 }
 
-const Trash: React.FC<TrashProps> = ({ leads, onSync, monthLabel, isSyncing }) => {
+const Trash: React.FC<TrashProps> = ({ leads, onUpdateStatus, onSync, monthLabel, isSyncing }) => {
   return (
     <div className="py-4">
       <div className="flex justify-between items-center mb-4 px-1">
@@ -44,9 +45,16 @@ const Trash: React.FC<TrashProps> = ({ leads, onSync, monthLabel, isSyncing }) =
               <span>{new Date(lead.timestamp).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
 
-            <div className="bg-[#F8F9FB] rounded-2xl p-4 border border-gray-100">
+            <div className="bg-[#F8F9FB] rounded-2xl p-4 border border-gray-100 mb-4">
                <p className="text-[12px] text-slate-500 italic">"{lead.notes || 'Sem notas explicativas.'}"</p>
             </div>
+            <button
+              onClick={() => onUpdateStatus(lead.id, { status: 'new' })}
+              disabled={isSyncing}
+              className="w-full py-3 rounded-2xl bg-slate-100 text-slate-600 text-[11px] font-bold uppercase tracking-wider disabled:opacity-50"
+            >
+              Restaurar para Inbox
+            </button>
           </div>
         ))}
       </div>

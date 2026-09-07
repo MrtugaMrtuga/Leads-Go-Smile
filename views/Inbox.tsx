@@ -6,6 +6,7 @@ import { Phone, Mail, X, Check, Calendar as CalendarIcon, User, Trash2, MessageS
 interface InboxProps {
   leads: Lead[];
   onUpdateStatus: (id: string, updates: Partial<Lead>, extraData?: any) => void;
+  onCreateLead: (input: Pick<Lead, 'name' | 'phone' | 'email' | 'notes'>) => void;
   onSync: () => void;
   monthLabel: string;
   isSyncing?: boolean;
@@ -13,9 +14,11 @@ interface InboxProps {
 
 type ModalType = 'none' | 'comment' | 'discard' | 'schedule';
 
-const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onSync, monthLabel, isSyncing }) => {
+const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, onSync, monthLabel, isSyncing }) => {
   const [activeModal, setActiveModal] = useState<ModalType>('none');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newLead, setNewLead] = useState({ name: '', phone: '', email: '', notes: '' });
   
   // Modal States
   const [comment, setComment] = useState('');
@@ -67,7 +70,7 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onSync, monthLabel
         medico: selectedDoctor, 
         data_consulta: appointmentDate, 
         status: 'scheduled',
-        comentario: comment // Enviando o comentário para o n8n
+        comentario: comment
       }
     );
     setActiveModal('none');
@@ -79,7 +82,15 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onSync, monthLabel
         <span className="text-[11px] font-bold text-[#A0AEC0] uppercase tracking-wider">
           {leads.length} Leads Ativas
         </span>
-        <button onClick={onSync} className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Atualizar</button>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => setShowCreate(true)}
+            className="text-[11px] font-bold text-slate-800 uppercase tracking-wider"
+          >
+            Nova
+          </button>
+          <button onClick={onSync} className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Atualizar</button>
+        </div>
       </div>
 
       <div className="space-y-6">
@@ -90,7 +101,7 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onSync, monthLabel
             <div className="flex justify-between items-start mb-4">
               <div className="max-w-[70%]">
                 <h3 className="text-xl font-bold text-[#2D3748] leading-tight mb-1">{lead.name}</h3>
-                <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-md text-[9px] font-bold uppercase tracking-wider">Facebook</span>
+                <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-md text-[9px] font-bold uppercase tracking-wider">{lead.source || 'Local'}</span>
               </div>
               <div className="flex flex-col items-end text-[#CBD5E0]">
                  <span className="text-[10px] font-bold uppercase">{new Date(lead.timestamp).toLocaleDateString('pt-PT')}</span>
@@ -136,6 +147,56 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onSync, monthLabel
           </div>
         ))}
       </div>
+
+      {showCreate && (
+        <div className="fixed inset-0 z-[100] flex items-end justify-center px-4 pb-10 bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-md bg-white rounded-[40px] shadow-2xl overflow-hidden">
+            <div className="p-8 space-y-5">
+              <div className="flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-slate-800">Nova Lead</h2>
+                <button onClick={() => setShowCreate(false)} className="p-2 bg-slate-100 rounded-full text-slate-400">
+                  <X size={20} />
+                </button>
+              </div>
+              <input
+                value={newLead.name}
+                onChange={(e) => setNewLead({ ...newLead, name: e.target.value })}
+                placeholder="Nome"
+                className="w-full h-14 bg-slate-50 rounded-2xl px-5 outline-none font-medium"
+              />
+              <input
+                value={newLead.phone}
+                onChange={(e) => setNewLead({ ...newLead, phone: e.target.value })}
+                placeholder="Telefone"
+                className="w-full h-14 bg-slate-50 rounded-2xl px-5 outline-none font-medium"
+              />
+              <input
+                value={newLead.email}
+                onChange={(e) => setNewLead({ ...newLead, email: e.target.value })}
+                placeholder="Email"
+                className="w-full h-14 bg-slate-50 rounded-2xl px-5 outline-none font-medium"
+              />
+              <textarea
+                value={newLead.notes}
+                onChange={(e) => setNewLead({ ...newLead, notes: e.target.value })}
+                placeholder="Notas"
+                className="w-full h-24 bg-slate-50 rounded-2xl p-5 outline-none font-medium"
+              />
+              <button
+                disabled={!newLead.name.trim() || isSyncing}
+                onClick={() => {
+                  onCreateLead(newLead);
+                  setNewLead({ name: '', phone: '', email: '', notes: '' });
+                  setShowCreate(false);
+                }}
+                className="w-full h-16 bg-black text-white font-bold rounded-2xl active:scale-95 disabled:opacity-30"
+              >
+                Guardar Lead
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* MODAL OVERLAY */}
       {activeModal !== 'none' && (
