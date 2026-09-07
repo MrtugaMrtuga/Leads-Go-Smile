@@ -104,7 +104,7 @@ export function createApiRouter() {
     res.json({
       ok: true,
       app: 'eVault Leads',
-      host: 'id.evault.org',
+      host: 'leads.evob.org',
       storage: 'local-json',
     });
   });
@@ -197,6 +197,6 @@ const app = createApp();
 if (process.env.EVAULT_NO_LISTEN !== '1') {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`eVault Leads listening on http://0.0.0.0:${PORT}`);
-    console.log(`API: http://127.0.0.1:${PORT}/api  ·  PWA: https://id.evault.org`);
+    console.log(`API: http://127.0.0.1:${PORT}/api  ·  PWA: https://leads.evob.org`);
   });
 }

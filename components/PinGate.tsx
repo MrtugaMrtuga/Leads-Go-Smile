@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Delete, Lock } from 'lucide-react';
 
-const PIN = '2009';
+const PIN = '2000';
 const STORAGE_KEY = 'evault.pin.ok';
 
 const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', '', '0', 'del'] as const;
@@ -60,7 +60,7 @@ const PinGate: React.FC<PinGateProps> = ({ children }) => {
           <div className="w-16 h-16 rounded-[22px] bg-white/10 border border-white/10 flex items-center justify-center mb-5">
             <Lock size={26} className="text-sky-300" />
           </div>
-          <p className="text-[10px] font-bold tracking-[0.35em] text-sky-300/80 uppercase">id.evault.org</p>
+          <p className="text-[10px] font-bold tracking-[0.35em] text-sky-300/80 uppercase">leads.evob.org</p>
           <h1 className="text-3xl font-bold tracking-tight mt-2">eVault Leads</h1>
           <p className="text-sm text-white/50 mt-2">Introduza o PIN para continuar</p>
         </div>

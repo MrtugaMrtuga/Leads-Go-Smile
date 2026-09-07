@@ -1,7 +1,7 @@
 {
   "name": "eVault Leads",
   "short_name": "eVault",
-  "description": "CRM local de leads para id.evault.org no Mac Mini",
+  "description": "CRM local de leads para leads.evob.org no Mac Mini",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

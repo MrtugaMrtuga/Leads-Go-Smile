@@ -1,10 +1,10 @@
 # eVault Leads
 
-PWA local de CRM de leads para **https://id.evault.org**, pensada para correr sozinha num **Mac Mini**.
+PWA local de CRM de leads para **https://leads.evob.org**, pensada para correr sozinha num **Mac Mini**.
 
 Não usa APIs pagas nem serviços externos: sem Gemini, sem Google Apps Script, sem Firebase, sem Google Sheets em direto, sem n8n. Os dados ficam em JSON em `./data/` e o frontend só fala com `/api` no mesmo origin.
 
-PIN de acesso: **2009** (guardado em `sessionStorage` até fechar o separador).
+PIN de acesso: **2000** (guardado em `sessionStorage` até fechar o separador).
 
 ## Arranque local
 
@@ -27,7 +27,7 @@ npm run build
 PORT=3040 npm start
 ```
 
-O servidor Express serve `dist/` e `/api` na mesma porta. Ver [DEPLOY.md](./DEPLOY.md) para launchd, **Cloudflare Tunnel** (`id.evault.org`) e Caddy.
+O servidor Express serve `dist/` e `/api` na mesma porta. Ver [DEPLOY.md](./DEPLOY.md) para launchd, **Cloudflare Tunnel** (`leads.evob.org`) e Caddy.
 
 ## API
 

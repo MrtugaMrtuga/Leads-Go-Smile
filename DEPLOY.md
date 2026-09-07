@@ -1,6 +1,6 @@
 # Deploy no Mac Mini — eVault Leads
 
-Alvo: **https://id.evault.org** na porta **3040**, PWA instalável, dados só em disco.
+Alvo: **https://leads.evob.org** na porta **3040**, PWA instalável, dados só em disco.
 
 ## 1. Requisitos
 
@@ -29,7 +29,7 @@ Teste local:
 
 ```bash
 curl -s http://127.0.0.1:3040/api/health
-# {"ok":true,"app":"eVault Leads","host":"id.evault.org","storage":"local-json"}
+# {"ok":true,"app":"eVault Leads","host":"leads.evob.org","storage":"local-json"}
 ```
 
 A UI e a API partilham a mesma origem. Não configure webhooks, Gemini, Apps Script nem Firebase.
@@ -46,7 +46,7 @@ launchctl load ~/Library/LaunchAgents/org.evault.leads.plist
 
 Logs: `/tmp/evault-leads.out.log` e `/tmp/evault-leads.err.log`.
 
-## 5. HTTPS em id.evault.org
+## 5. HTTPS em leads.evob.org
 
 A app escuta só em `127.0.0.1:3040`. Exponha o domínio com **Cloudflare Tunnel** (recomendado no Mini) ou Caddy.
 
@@ -56,7 +56,7 @@ A app escuta só em `127.0.0.1:3040`. Exponha o domínio com **Cloudflare Tunnel
 brew install cloudflared
 cloudflared tunnel login
 cloudflared tunnel create evault-leads
-cloudflared tunnel route dns evault-leads id.evault.org
+cloudflared tunnel route dns evault-leads leads.evob.org
 ```
 
 `~/.cloudflared/config.yml`:
@@ -65,7 +65,7 @@ cloudflared tunnel route dns evault-leads id.evault.org
 tunnel: evault-leads
 credentials-file: /Users/SEU_USER/.cloudflared/<TUNNEL_ID>.json
 ingress:
-  - hostname: id.evault.org
+  - hostname: leads.evob.org
     service: http://127.0.0.1:3040
   - service: http_status:404
 ```
@@ -79,7 +79,7 @@ O frontend continua em same-origin `/api` — o túnel não muda URLs.
 ### Caddy (alternativa se o Mini tiver IP público)
 
 ```
-id.evault.org {
+leads.evob.org {
   encode gzip
   reverse_proxy 127.0.0.1:3040
 }
@@ -94,7 +94,7 @@ Firewall: só 80/443 públicos; 3040 fica em localhost se usar proxy ou túnel.
 
 ## 6. PWA
 
-No Safari ou Chrome, abra https://id.evault.org, introduza o PIN **2009**, depois **Partilhar → Adicionar ao Ecrã Principal** (iOS) ou **Instalar aplicação** (desktop).
+No Safari ou Chrome, abra https://leads.evob.org, introduza o PIN **2000**, depois **Partilhar → Adicionar ao Ecrã Principal** (iOS) ou **Instalar aplicação** (desktop).
 
 ## 7. Cópias de segurança
 

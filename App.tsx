@@ -175,7 +175,7 @@ const App: React.FC = () => {
       activeView={activeView}
       setActiveView={setActiveView}
       title={activeView === 'resumo' ? 'Resumo' : activeView.charAt(0).toUpperCase() + activeView.slice(1)}
-      subtitle={activeView === 'resumo' ? 'eVault Leads · id.evault.org' : undefined}
+      subtitle={activeView === 'resumo' ? 'eVault Leads · leads.evob.org' : undefined}
       currentMonthLabel={monthLabel}
       onPrevMonth={() => changeMonth(-1)}
       onNextMonth={() => changeMonth(1)}

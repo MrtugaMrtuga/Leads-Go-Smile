@@ -117,7 +117,7 @@ const Admin: React.FC<AdminProps> = ({ settings, onUpdateSettings, leads, onUpda
               <label className="text-[10px] font-bold text-[#A0AEC0] uppercase tracking-widest block mb-3">Armazenamento</label>
               <div className="w-full min-h-14 bg-[#F8F9FB] rounded-2xl px-6 py-4 font-medium text-[11px] text-gray-600 border border-transparent">
                 JSON local em <span className="font-bold">./data</span> · API same-origin <span className="font-bold">/api</span>
-                <span className="block text-[10px] text-slate-400 mt-1 uppercase tracking-widest">id.evault.org · Mac Mini</span>
+                <span className="block text-[10px] text-slate-400 mt-1 uppercase tracking-widest">leads.evob.org · Mac Mini</span>
               </div>
             </div>
           </div>
