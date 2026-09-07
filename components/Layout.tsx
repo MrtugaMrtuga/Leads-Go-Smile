@@ -1,8 +1,6 @@
-
 import React from 'react';
-import { NAVIGATION_ITEMS } from '../constants';
+import { DOCK_ITEMS } from '../constants';
 import { AppView } from '../types';
-import { ChevronLeft, ChevronRight, RefreshCw } from 'lucide-react';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -17,80 +15,73 @@ interface LayoutProps {
   isSyncing?: boolean;
 }
 
-const Layout: React.FC<LayoutProps> = ({ 
-  children, 
-  activeView, 
-  setActiveView, 
-  title, 
-  subtitle, 
+const Layout: React.FC<LayoutProps> = ({
+  children,
+  activeView,
+  setActiveView,
+  title,
+  subtitle,
   currentMonthLabel,
   onPrevMonth,
   onNextMonth,
   onSync,
-  isSyncing
+  isSyncing,
 }) => {
   return (
-    <div className="flex flex-col h-screen max-w-md mx-auto bg-white overflow-hidden relative shadow-2xl border-x border-gray-100">
-      {/* iOS Header */}
-      <header className="px-6 pt-12 pb-4 bg-white/80 ios-blur sticky top-0 z-50">
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-4xl font-bold tracking-tight text-[#2C3E50]">{title}</h1>
-            {subtitle && <p className="text-[10px] font-bold tracking-widest text-[#A0AEC0] mt-1 uppercase">{subtitle}</p>}
-          </div>
-          <button 
-            onClick={onSync}
-            disabled={isSyncing}
-            className="p-3 bg-white rounded-2xl shadow-lg border border-gray-100 text-[#4A5568] active:scale-95 transition-all disabled:opacity-50"
+    <div className="app">
+      <header className="header">
+        <span className="word">GoSmile</span>
+        <div className="header-right">
+          <button
+            type="button"
+            className="gear-btn"
+            aria-label="Admin"
+            onClick={() => setActiveView('admin')}
           >
-            <RefreshCw 
-              size={24} 
-              className={`text-blue-500 ${isSyncing ? 'animate-spin' : ''}`} 
-            />
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M19.14 12.94c.04-.31.06-.63.06-.94s-.02-.63-.06-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32a.49.49 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94L14.4 2.81a.49.49 0 0 0-.48-.41h-3.84a.49.49 0 0 0-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96a.49.49 0 0 0-.59.22L2.74 8.87c-.11.2-.06.47.12.61l2.03 1.58c-.04.31-.06.63-.06.94s.02.63.06.94l-2.03 1.58c-.18.14-.23.41.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.04.24.24.41.47.41h3.84c.24 0 .44-.17.48-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.03-1.58zM12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2z" />
+            </svg>
           </button>
+          <img className="logo-img" src="/logo_Gosmilesimple.png" alt="" />
         </div>
-        
-        {activeView !== 'admin' && (
-          <div className="mt-4 flex items-center justify-between bg-[#F1F4F8] px-2 py-1.5 rounded-2xl">
-            <button onClick={onPrevMonth} className="p-1.5 hover:bg-white rounded-xl transition-colors">
-              <ChevronLeft size={18} className="text-slate-500" />
-            </button>
-            <span className="text-[12px] font-bold text-[#718096] uppercase">
-              {currentMonthLabel}
-            </span>
-            <button onClick={onNextMonth} className="p-1.5 hover:bg-white rounded-xl transition-colors">
-              <ChevronRight size={18} className="text-slate-500" />
-            </button>
-          </div>
-        )}
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 overflow-y-auto px-6 pb-32 hide-scrollbar bg-[#F8F9FB]">
-        {children}
-      </main>
+      <h1 className="page-title">{title}</h1>
+      {subtitle && <p className="sub">{subtitle}</p>}
 
-      {/* iOS Bottom Navigation */}
-      <nav className="absolute bottom-0 left-0 right-0 ios-blur bg-white/90 border-t border-gray-100 px-4 py-3 pb-8 z-20">
-        <div className="flex justify-between items-center max-w-md mx-auto">
-          {NAVIGATION_ITEMS.map((item) => (
-            <button
-              key={item.id}
-              onClick={() => setActiveView(item.id)}
-              className={`flex flex-col items-center gap-1.5 transition-all duration-200 ${
-                activeView === item.id ? 'text-[#2C3E50]' : 'text-[#A0AEC0]'
-              }`}
-            >
-              <div className={`p-1 ${activeView === item.id ? 'scale-110 text-black' : 'scale-100'}`}>
-                {item.icon}
-              </div>
-              <span className="text-[9px] font-bold tracking-wider">{item.label}</span>
-              {activeView === item.id && (
-                <div className="w-1 h-1 bg-black rounded-full"></div>
-              )}
-            </button>
-          ))}
+      {activeView !== 'admin' && (
+        <div className="month-nav">
+          <button type="button" onClick={onPrevMonth} aria-label="Mês anterior">
+            ←
+          </button>
+          <span>{currentMonthLabel}</span>
+          <button type="button" onClick={onNextMonth} aria-label="Mês seguinte">
+            →
+          </button>
         </div>
+      )}
+
+      {onSync && activeView !== 'admin' && (
+        <div className="tools">
+          <button type="button" onClick={onSync} disabled={isSyncing}>
+            {isSyncing ? 'A actualizar…' : 'Actualizar'}
+          </button>
+        </div>
+      )}
+
+      <main>{children}</main>
+
+      <nav className="dock" aria-label="Navegação">
+        {DOCK_ITEMS.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`dock-item${activeView === item.id ? ' is-on' : ''}`}
+            onClick={() => setActiveView(item.id)}
+          >
+            {item.label}
+          </button>
+        ))}
       </nav>
     </div>
   );

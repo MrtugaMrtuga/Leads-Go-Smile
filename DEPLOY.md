@@ -1,4 +1,4 @@
-# Deploy no Mac Mini — eVault Leads
+# Deploy no Mac Mini — GoSmile Leads
 
 Alvo: **https://leads.evob.org** na porta **3040**, PWA instalável, dados só em disco.
 
@@ -29,7 +29,7 @@ Teste local:
 
 ```bash
 curl -s http://127.0.0.1:3040/api/health
-# {"ok":true,"app":"eVault Leads","host":"leads.evob.org","storage":"local-json"}
+# {"ok":true,"app":"GoSmile Leads","host":"leads.evob.org","storage":"local-json"}
 ```
 
 A UI e a API partilham a mesma origem. Não configure webhooks, Gemini, Apps Script nem Firebase.

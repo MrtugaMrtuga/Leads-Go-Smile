@@ -11,7 +11,7 @@ import { formatMonthYear, getLeadsByMonth } from './utils';
 import { createLead, fetchLeads, fetchSettings, saveSettings, sendReminder, updateLead } from './api';
 
 const App: React.FC = () => {
-  const [activeView, setActiveView] = useState<AppView>('resumo');
+  const [activeView, setActiveView] = useState<AppView>('inbox');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -163,6 +163,8 @@ const App: React.FC = () => {
             onUpdateSettings={handleUpdateSettings}
             leads={leads}
             onUpdateStatus={handleLeadAction}
+            onOpenTrash={() => setActiveView('lixo')}
+            onOpenAccounts={() => setActiveView('contas')}
           />
         );
       default:
@@ -174,8 +176,20 @@ const App: React.FC = () => {
     <Layout
       activeView={activeView}
       setActiveView={setActiveView}
-      title={activeView === 'resumo' ? 'Resumo' : activeView.charAt(0).toUpperCase() + activeView.slice(1)}
-      subtitle={activeView === 'resumo' ? 'eVault Leads · leads.evob.org' : undefined}
+      title={
+        activeView === 'resumo'
+          ? 'Dashboard'
+          : activeView === 'visitas'
+            ? 'Marcações'
+            : activeView === 'lixo'
+              ? 'Lixo'
+              : activeView === 'contas'
+                ? 'Contas'
+                : activeView === 'admin'
+                  ? 'Admin'
+                  : 'Inbox'
+      }
+      subtitle={activeView === 'resumo' ? 'leads.evob.org' : undefined}
       currentMonthLabel={monthLabel}
       onPrevMonth={() => changeMonth(-1)}
       onNextMonth={() => changeMonth(1)}
@@ -183,9 +197,7 @@ const App: React.FC = () => {
       isSyncing={isLoading || isSyncing}
     >
       {(fetchError || isSyncing) && (
-        <div className={`px-4 py-2 text-[10px] font-bold text-center uppercase tracking-tight transition-all fixed top-[110px] left-0 right-0 z-50 shadow-md ${isSyncing ? 'bg-blue-600 text-white' : 'bg-amber-500 text-white'}`}>
-          {isSyncing ? 'A processar...' : fetchError}
-        </div>
+        <div className="toast">{isSyncing ? 'A processar…' : fetchError}</div>
       )}
       {renderView()}
     </Layout>

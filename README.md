@@ -1,10 +1,10 @@
-# eVault Leads
+# GoSmile Leads
 
-PWA local de CRM de leads para **https://leads.evob.org**, pensada para correr sozinha num **Mac Mini**.
+PWA local de CRM de leads para **https://leads.evob.org**, look **GoSmile V2-pt** (o mesmo de gosmile.evob.org /v2 /recepcao /implantes), a correr sozinha num **Mac Mini**.
 
-Não usa APIs pagas nem serviços externos: sem Gemini, sem Google Apps Script, sem Firebase, sem Google Sheets em direto, sem n8n. Os dados ficam em JSON em `./data/` e o frontend só fala com `/api` no mesmo origin.
+Não usa APIs pagas nem serviços externos: sem Gemini, sem Google Apps Script, sem Firebase, sem Google Sheets em directo, sem n8n. Os dados ficam em JSON em `./data/` e o frontend só fala com `/api` no mesmo origin.
 
-PIN de acesso: **2000** (guardado em `sessionStorage` até fechar o separador).
+PIN de acesso: **2000** (sessionStorage `gosmile-leads-unlocked`). O ecrã de PIN é HTML/CSS/JS clássico (G 144px + 4 caixas + Entrar), para o iPhone não ficar ecrã branco.
 
 ## Arranque local
 

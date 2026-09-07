@@ -1,5 +1,5 @@
 {
-  "name": "eVault Leads",
-  "description": "PWA local de CRM de leads para leads.evob.org no Mac Mini, com JSON em ./data e API same-origin /api.",
+  "name": "GoSmile Leads",
+  "description": "PWA local de CRM de leads GoSmile para leads.evob.org no Mac Mini, look V2-pt, JSON em ./data e API /api.",
   "requestFramePermissions": []
 }

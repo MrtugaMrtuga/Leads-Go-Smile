@@ -1,19 +1,19 @@
 {
-  "name": "eVault Leads",
-  "short_name": "eVault",
-  "description": "CRM local de leads para leads.evob.org no Mac Mini",
+  "name": "GoSmile Leads",
+  "short_name": "Leads",
+  "description": "CRM local de leads GoSmile em leads.evob.org no Mac Mini",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#0B1220",
-  "theme_color": "#0B1220",
+  "background_color": "#fafafa",
+  "theme_color": "#fafafa",
   "lang": "pt-PT",
   "icons": [
     {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "src": "/logo_Gosmilesimple.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
     }
   ]
 }

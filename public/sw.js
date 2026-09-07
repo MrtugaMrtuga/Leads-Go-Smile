@@ -1,8 +1,8 @@
-const CACHE = 'evault-leads-v1';
+const CACHE = 'gosmile-leads-v2';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE).then((cache) => cache.addAll(['/', '/index.html', '/manifest.webmanifest', '/icon.svg']))
+    caches.open(CACHE).then((cache) => cache.addAll(['/', '/index.html', '/look.css', '/pin.js', '/logo_Gosmilesimple.png', '/manifest.webmanifest']))
   );
   self.skipWaiting();
 });

@@ -1,6 +1,4 @@
-
-import React from 'react';
-import { ChevronDown } from 'lucide-react';
+import React, { useState } from 'react';
 import { Lead } from '../types';
 
 interface DashboardProps {
@@ -10,82 +8,66 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ leads, monthLabel }) => {
   const total = leads.length;
-  const positive = leads.filter(l => l.status === 'positive').length;
-  const scheduled = leads.filter(l => l.status === 'scheduled').length;
-  const lixo = leads.filter(l => l.status === 'discarded').length;
+  const scheduled = leads.filter((l) => l.status === 'scheduled').length;
+  const contacted = leads.filter((l) => l.status === 'contacted' || l.status === 'new').length;
+  const lixo = leads.filter((l) => l.status === 'discarded').length;
+  const [metric, setMetric] = useState<'inbox' | 'marcadas' | 'lixo'>('marcadas');
 
-  const getPercent = (count: number) => total > 0 ? Math.round((count / total) * 100) : 0;
+  const byOrigin = leads.reduce<Record<string, number>>((acc, lead) => {
+    const key = lead.source || 'Local';
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
 
   return (
-    <div className="py-4">
-      <div className="bg-white rounded-[40px] ios-shadow border border-gray-50 p-8 flex flex-col items-center mb-6">
-        <div className="inline-flex items-center gap-2 bg-[#F1F4F8] px-4 py-2 rounded-2xl text-[12px] font-semibold text-[#718096] mb-12">
-          {monthLabel} <ChevronDown size={14} />
-        </div>
+    <div>
+      <p className="hero-kicker">{monthLabel}</p>
+      <p className="hero-num">{total}</p>
+      <p className="hero-foot">leads</p>
 
-        {/* Circular Progress (Visual Representation) */}
-        <div className="relative w-56 h-56 flex items-center justify-center mb-16">
-          <svg className="w-full h-full transform -rotate-90">
-            <circle
-              cx="112"
-              cy="112"
-              r="100"
-              fill="transparent"
-              stroke="#F1F4F8"
-              strokeWidth="20"
-            />
-            <circle
-              cx="112"
-              cy="112"
-              r="100"
-              fill="transparent"
-              stroke="#E2E8F0"
-              strokeWidth="20"
-              strokeDasharray="628"
-              strokeDashoffset="200"
-              strokeLinecap="round"
-            />
-          </svg>
-          <div className="absolute flex flex-col items-center">
-            <span className="text-6xl font-bold text-[#2D3748]">{total}</span>
-            <span className="text-[12px] font-bold text-[#A0AEC0] tracking-widest uppercase">Leads</span>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-3 w-full gap-4">
-          <div className="flex flex-col items-center">
-            <div className="flex items-center gap-1.5 mb-1">
-               <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
-               <span className="text-xl font-bold text-[#2D3748]">{getPercent(positive)}%</span>
-            </div>
-            <span className="text-[10px] font-bold text-[#A0AEC0] uppercase">Positivas</span>
-          </div>
-          <div className="flex flex-col items-center border-x border-gray-100">
-            <div className="flex items-center gap-1.5 mb-1">
-               <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
-               <span className="text-xl font-bold text-[#2D3748]">{getPercent(scheduled)}%</span>
-            </div>
-            <span className="text-[10px] font-bold text-[#A0AEC0] uppercase">Marcadas</span>
-          </div>
-          <div className="flex flex-col items-center">
-            <div className="flex items-center gap-1.5 mb-1">
-               <div className="w-1.5 h-1.5 bg-red-400 rounded-full"></div>
-               <span className="text-xl font-bold text-[#2D3748]">{getPercent(lixo)}%</span>
-            </div>
-            <span className="text-[10px] font-bold text-[#A0AEC0] uppercase">Lixo</span>
-          </div>
-        </div>
+      <div className="circles">
+        <button
+          type="button"
+          className={`circle-btn${metric === 'inbox' ? ' is-on' : ''}`}
+          onClick={() => setMetric('inbox')}
+        >
+          <span className="circle">{contacted}</span>
+          <span className="circle-label">Inbox</span>
+        </button>
+        <button
+          type="button"
+          className={`circle-btn${metric === 'marcadas' ? ' is-on' : ''}`}
+          onClick={() => setMetric('marcadas')}
+        >
+          <span className="circle">{scheduled}</span>
+          <span className="circle-label">Marcadas</span>
+        </button>
+        <button
+          type="button"
+          className={`circle-btn${metric === 'lixo' ? ' is-on' : ''}`}
+          onClick={() => setMetric('lixo')}
+        >
+          <span className="circle">{lixo}</span>
+          <span className="circle-label">Lixo</span>
+        </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-4">
-        <div className="bg-white rounded-[32px] ios-shadow border border-gray-50 p-6">
-            <span className="text-[10px] font-bold text-[#A0AEC0] uppercase tracking-wider block mb-2">Conversão</span>
-            <span className="text-3xl font-bold text-[#2D3748]">{getPercent(scheduled + positive)}%</span>
-        </div>
-        <div className="bg-white rounded-[32px] ios-shadow border border-gray-50 p-6">
-            <span className="text-[10px] font-bold text-[#A0AEC0] uppercase tracking-wider block mb-2">Objetivo</span>
-            <span className="text-3xl font-bold text-[#2D3748]">75%</span>
-        </div>
+      <h2 className="section-label">Por origem</h2>
+      <div className="list">
+        {Object.keys(byOrigin).length === 0 ? (
+          <p className="center-note">Sem leads neste mês.</p>
+        ) : (
+          Object.entries(byOrigin)
+            .sort((a, b) => b[1] - a[1])
+            .map(([origin, count]) => (
+              <div key={origin} className="row">
+                <span className="row-main">
+                  <span className="row-title">{origin}</span>
+                </span>
+                <span className="row-value">{count}</span>
+              </div>
+            ))
+        )}
       </div>
     </div>
   );
