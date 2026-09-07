@@ -29,6 +29,26 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
     return leads;
   }, [leads, filter]);
 
+  const statusLabel = (status: Lead['status']) => {
+    if (status === 'new') return 'Novo';
+    if (status === 'contacted') return 'Contactado';
+    if (status === 'scheduled') return 'Marcado';
+    if (status === 'discarded') return 'Perdido';
+    return status;
+  };
+
+  const timeAgo = (iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const mins = Math.max(0, Math.round((Date.now() - d.getTime()) / 60000));
+    if (mins < 1) return 'agora';
+    if (mins < 60) return `há ${mins} min`;
+    const hours = Math.round(mins / 60);
+    if (hours < 24) return `há ${hours} h`;
+    const days = Math.round(hours / 24);
+    return `há ${days} d`;
+  };
+
   const open = (type: ModalType, lead?: Lead) => {
     setSelectedLead(lead || null);
     setComment('');
@@ -91,11 +111,10 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
               <span className="row-main">
                 <span className="row-title">{lead.name}</span>
                 <span className="row-sub">
-                  {lead.source || 'Local'} · {lead.phone ? String(lead.phone).slice(-9) : 'sem telefone'}
-                  {lead.notes ? ` · ${lead.notes}` : ''}
+                  {lead.source || 'Local'} · {timeAgo(lead.timestamp)}
                 </span>
               </span>
-              <span className="chevron">›</span>
+              <span className="row-status">{statusLabel(lead.status)}</span>
             </button>
           ))}
         </div>

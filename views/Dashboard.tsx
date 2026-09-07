@@ -8,10 +8,11 @@ interface DashboardProps {
 
 const Dashboard: React.FC<DashboardProps> = ({ leads, monthLabel }) => {
   const total = leads.length;
-  const scheduled = leads.filter((l) => l.status === 'scheduled').length;
-  const contacted = leads.filter((l) => l.status === 'contacted' || l.status === 'new').length;
-  const lixo = leads.filter((l) => l.status === 'discarded').length;
-  const [metric, setMetric] = useState<'inbox' | 'marcadas' | 'lixo'>('marcadas');
+  const novos = leads.filter((l) => l.status === 'new').length;
+  const contactos = leads.filter((l) => l.status === 'contacted').length;
+  const marcados = leads.filter((l) => l.status === 'scheduled').length;
+  const perdidos = leads.filter((l) => l.status === 'discarded').length;
+  const [metric, setMetric] = useState<'novos' | 'contactos' | 'marcados' | 'perdidos'>('novos');
 
   const byOrigin = leads.reduce<Record<string, number>>((acc, lead) => {
     const key = lead.source || 'Local';
@@ -19,37 +20,30 @@ const Dashboard: React.FC<DashboardProps> = ({ leads, monthLabel }) => {
     return acc;
   }, {});
 
+  const circles = [
+    { id: 'novos' as const, value: novos, label: 'Novos' },
+    { id: 'contactos' as const, value: contactos, label: 'Contactos' },
+    { id: 'marcados' as const, value: marcados, label: 'Marcados' },
+    { id: 'perdidos' as const, value: perdidos, label: 'Perdidos' },
+  ];
+
   return (
     <div>
-      <p className="hero-kicker">{monthLabel}</p>
       <p className="hero-num">{total}</p>
-      <p className="hero-foot">leads</p>
+      <p className="hero-foot">leads · {monthLabel.toLowerCase()}</p>
 
       <div className="circles">
-        <button
-          type="button"
-          className={`circle-btn${metric === 'inbox' ? ' is-on' : ''}`}
-          onClick={() => setMetric('inbox')}
-        >
-          <span className="circle">{contacted}</span>
-          <span className="circle-label">Inbox</span>
-        </button>
-        <button
-          type="button"
-          className={`circle-btn${metric === 'marcadas' ? ' is-on' : ''}`}
-          onClick={() => setMetric('marcadas')}
-        >
-          <span className="circle">{scheduled}</span>
-          <span className="circle-label">Marcadas</span>
-        </button>
-        <button
-          type="button"
-          className={`circle-btn${metric === 'lixo' ? ' is-on' : ''}`}
-          onClick={() => setMetric('lixo')}
-        >
-          <span className="circle">{lixo}</span>
-          <span className="circle-label">Lixo</span>
-        </button>
+        {circles.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`circle-btn${metric === item.id ? ' is-on' : ''}`}
+            onClick={() => setMetric(item.id)}
+          >
+            <span className="circle">{item.value}</span>
+            <span className="circle-label">{item.label}</span>
+          </button>
+        ))}
       </div>
 
       <h2 className="section-label">Por origem</h2>
@@ -65,6 +59,7 @@ const Dashboard: React.FC<DashboardProps> = ({ leads, monthLabel }) => {
                   <span className="row-title">{origin}</span>
                 </span>
                 <span className="row-value">{count}</span>
+                <span className="chevron">›</span>
               </div>
             ))
         )}

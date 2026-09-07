@@ -117,7 +117,7 @@ const App: React.FC = () => {
       case 'inbox':
         return (
           <Inbox
-            leads={currentLeads.filter((l) => l.status === 'new' || l.status === 'contacted')}
+            leads={currentLeads.filter((l) => l.status === 'new' || l.status === 'contacted' || l.status === 'scheduled')}
             onUpdateStatus={handleLeadAction}
             onCreateLead={handleCreateLead}
             onSync={loadLeads}
@@ -189,7 +189,7 @@ const App: React.FC = () => {
                   ? 'Admin'
                   : 'Inbox'
       }
-      subtitle={activeView === 'resumo' ? 'leads.evob.org' : undefined}
+      subtitle={undefined}
       currentMonthLabel={monthLabel}
       onPrevMonth={() => changeMonth(-1)}
       onNextMonth={() => changeMonth(1)}
