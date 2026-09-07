@@ -1,5 +1,5 @@
 {
-  "name": "Go Smile Leads",
-  "description": "Uma aplicação web premium estilo iOS 26 para gestão de leads da clínica Go Smile, com dashboards, inbox e controle de agendamentos.",
+  "name": "GoSmile Leads",
+  "description": "PWA local de CRM de leads GoSmile para leads.evob.org no Mac Mini, look V2-pt, JSON em ./data e API /api.",
   "requestFramePermissions": []
 }

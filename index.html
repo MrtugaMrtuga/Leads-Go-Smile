@@ -1,46 +1,54 @@
-
 <!DOCTYPE html>
-<html lang="pt-PT">
+<html lang="pt-PT" style="background:#fafafa">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Go Smile Clinic - Gestão de Leads</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <meta name="theme-color" content="#fafafa">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <meta name="apple-mobile-web-app-title" content="GoSmile Leads">
+    <title>GoSmile Leads · leads.evob.org</title>
+    <link rel="canonical" href="https://leads.evob.org/">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/look.css">
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" type="image/png" href="/logo_Gosmilesimple.png">
+    <link rel="apple-touch-icon" href="/logo_Gosmilesimple.png">
     <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            -webkit-tap-highlight-color: transparent;
-            background-color: #F8F9FB;
-        }
-        .ios-shadow {
-            box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.05);
-        }
-        .ios-blur {
-            backdrop-filter: blur(20px);
-            -webkit-backdrop-filter: blur(20px);
-        }
-        .hide-scrollbar::-webkit-scrollbar {
-            display: none;
-        }
-        .hide-scrollbar {
-            -ms-overflow-style: none;
-            scrollbar-width: none;
-        }
+      #lock[hidden]{display:none !important}
+      html:not(.is-unlocked) #root{display:none}
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
-  }
-}
-</script>
+    <script>
+      (function () {
+        try {
+          if (sessionStorage.getItem('gosmile-leads-unlocked') === '1') {
+            document.documentElement.classList.add('is-unlocked');
+          }
+        } catch (e) {}
+      })();
+    </script>
 </head>
-<body class="bg-[#F8F9FB] text-[#2C3E50]">
+<body>
+    <div id="lock" class="lock">
+      <div class="lock-mark">
+        <img src="/logo_Gosmilesimple.png" alt="GoSmile" width="144" height="144">
+      </div>
+      <form id="pin-form" class="lock-form" autocomplete="off">
+        <input id="pin" class="hidden-pin" inputmode="numeric" maxlength="4" autocomplete="one-time-code" aria-label="PIN">
+        <div class="pin-boxes" id="boxes">
+          <span class="pin-box on" data-i="0"></span>
+          <span class="pin-box" data-i="1"></span>
+          <span class="pin-box" data-i="2"></span>
+          <span class="pin-box" data-i="3"></span>
+        </div>
+        <button class="cta lock-enter" type="submit">Entrar</button>
+        <p class="lock-err" id="pin-err"></p>
+      </form>
+    </div>
     <div id="root"></div>
+    <script src="/pin.js"></script>
     <script type="module" src="/index.tsx"></script>
 </body>
 </html>

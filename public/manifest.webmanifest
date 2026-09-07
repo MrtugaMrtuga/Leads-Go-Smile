@@ -1,0 +1,19 @@
+{
+  "name": "GoSmile Leads",
+  "short_name": "Leads",
+  "description": "CRM local de leads GoSmile em leads.evob.org no Mac Mini",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fafafa",
+  "theme_color": "#fafafa",
+  "lang": "pt-PT",
+  "icons": [
+    {
+      "src": "/logo_Gosmilesimple.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

@@ -1,262 +1,251 @@
-
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Lead } from '../types';
-import { Phone, Mail, X, Check, Calendar as CalendarIcon, User, Trash2, MessageSquare } from 'lucide-react';
 
 interface InboxProps {
   leads: Lead[];
   onUpdateStatus: (id: string, updates: Partial<Lead>, extraData?: any) => void;
+  onCreateLead: (input: Pick<Lead, 'name' | 'phone' | 'email' | 'notes'>) => void;
   onSync: () => void;
   monthLabel: string;
   isSyncing?: boolean;
 }
 
-type ModalType = 'none' | 'comment' | 'discard' | 'schedule';
+type Filter = 'todos' | 'novos' | 'contactados';
+type ModalType = 'none' | 'comment' | 'discard' | 'schedule' | 'create';
 
-const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onSync, monthLabel, isSyncing }) => {
+const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSyncing }) => {
+  const [filter, setFilter] = useState<Filter>('todos');
   const [activeModal, setActiveModal] = useState<ModalType>('none');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
-  
-  // Modal States
+  const [newLead, setNewLead] = useState({ name: '', phone: '', email: '', notes: '' });
   const [comment, setComment] = useState('');
   const [appointmentDate, setAppointmentDate] = useState('');
   const [selectedDoctor, setSelectedDoctor] = useState('');
   const [isOrto, setIsOrto] = useState(false);
 
-  const openCommentModal = (lead: Lead) => {
-    setSelectedLead(lead);
-    setComment('');
-    setActiveModal('comment');
+  const visible = useMemo(() => {
+    if (filter === 'novos') return leads.filter((l) => l.status === 'new');
+    if (filter === 'contactados') return leads.filter((l) => l.status === 'contacted');
+    return leads;
+  }, [leads, filter]);
+
+  const statusLabel = (status: Lead['status']) => {
+    if (status === 'new') return 'Novo';
+    if (status === 'contacted') return 'Contactado';
+    if (status === 'scheduled') return 'Marcado';
+    if (status === 'discarded') return 'Perdido';
+    return status;
   };
 
-  const openDiscardModal = (lead: Lead) => {
-    setSelectedLead(lead);
-    setComment('');
-    setActiveModal('discard');
+  const timeAgo = (iso: string) => {
+    const d = new Date(iso);
+    if (Number.isNaN(d.getTime())) return '';
+    const mins = Math.max(0, Math.round((Date.now() - d.getTime()) / 60000));
+    if (mins < 1) return 'agora';
+    if (mins < 60) return `há ${mins} min`;
+    const hours = Math.round(mins / 60);
+    if (hours < 24) return `há ${hours} h`;
+    const days = Math.round(hours / 24);
+    return `há ${days} d`;
   };
 
-  const openScheduleModal = (lead: Lead) => {
-    setSelectedLead(lead);
+  const open = (type: ModalType, lead?: Lead) => {
+    setSelectedLead(lead || null);
+    setComment('');
     setAppointmentDate('');
     setSelectedDoctor('');
-    setComment(''); // Reset comment for schedule
     setIsOrto(false);
-    setActiveModal('schedule');
+    setActiveModal(type);
   };
+
+  const close = () => setActiveModal('none');
 
   const submitComment = () => {
     if (!selectedLead) return;
     onUpdateStatus(selectedLead.id, { status: 'contacted', notes: comment }, { comentario: comment });
-    setActiveModal('none');
+    close();
   };
 
   const submitDiscard = () => {
     if (!selectedLead) return;
-    onUpdateStatus(selectedLead.id, 
-      { status: 'discarded', notes: comment }, 
-      { estado: 'NÃO INTERESSADA', comentario: comment }
-    );
-    setActiveModal('none');
+    onUpdateStatus(selectedLead.id, { status: 'discarded', notes: comment }, { estado: 'NÃO INTERESSADA', comentario: comment });
+    close();
   };
 
   const submitSchedule = () => {
     if (!selectedLead || !selectedDoctor || !appointmentDate) return;
-    onUpdateStatus(selectedLead.id, 
-      { status: 'scheduled', doctor: selectedDoctor, appointmentDate, notes: comment }, 
-      { 
-        medico: selectedDoctor, 
-        data_consulta: appointmentDate, 
-        status: 'scheduled',
-        comentario: comment // Enviando o comentário para o n8n
-      }
+    onUpdateStatus(
+      selectedLead.id,
+      { status: 'scheduled', doctor: selectedDoctor, appointmentDate, notes: comment },
+      { medico: selectedDoctor, data_consulta: appointmentDate, status: 'scheduled', comentario: comment }
     );
-    setActiveModal('none');
+    close();
   };
 
   return (
-    <div className="py-4 relative">
-      <div className="flex justify-between items-center mb-6 px-1">
-        <span className="text-[11px] font-bold text-[#A0AEC0] uppercase tracking-wider">
-          {leads.length} Leads Ativas
-        </span>
-        <button onClick={onSync} className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Atualizar</button>
+    <div>
+      <div className="filters">
+        <button type="button" className={`filter${filter === 'todos' ? ' is-on' : ''}`} onClick={() => setFilter('todos')}>
+          Todos
+        </button>
+        <button type="button" className={`filter${filter === 'novos' ? ' is-on' : ''}`} onClick={() => setFilter('novos')}>
+          Novos
+        </button>
+        <button type="button" className={`filter${filter === 'contactados' ? ' is-on' : ''}`} onClick={() => setFilter('contactados')}>
+          Contactados
+        </button>
       </div>
 
-      <div className="space-y-6">
-        {leads.length === 0 ? (
-          <div className="text-center py-20 text-gray-400">Nenhuma lead pendente.</div>
-        ) : leads.map((lead) => (
-          <div key={lead.id} className="bg-white rounded-[32px] ios-shadow border border-gray-50 p-6">
-            <div className="flex justify-between items-start mb-4">
-              <div className="max-w-[70%]">
-                <h3 className="text-xl font-bold text-[#2D3748] leading-tight mb-1">{lead.name}</h3>
-                <span className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded-md text-[9px] font-bold uppercase tracking-wider">Facebook</span>
-              </div>
-              <div className="flex flex-col items-end text-[#CBD5E0]">
-                 <span className="text-[10px] font-bold uppercase">{new Date(lead.timestamp).toLocaleDateString('pt-PT')}</span>
-                 <span className="text-[9px] font-medium">{new Date(lead.timestamp).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}</span>
-              </div>
-            </div>
+      <div className="tools">
+        <button type="button" onClick={() => open('create')}>
+          Nova lead
+        </button>
+      </div>
 
-            <div className="grid grid-cols-2 gap-2 mb-6">
-               <a href={`tel:${lead.phone}`} className="flex items-center gap-2 p-3 bg-slate-50 rounded-2xl text-[12px] font-bold text-slate-600 active:bg-slate-100 transition-colors">
-                  <Phone size={14} /> {lead.phone.toString().slice(-9)}
-               </a>
-               <div className="flex items-center gap-2 p-3 bg-slate-50 rounded-2xl text-[12px] font-bold text-slate-600 truncate">
-                  <Mail size={14} /> <span className="truncate">{lead.email}</span>
-               </div>
-            </div>
+      {visible.length === 0 ? (
+        <p className="center-note">Nenhuma lead nesta lista.</p>
+      ) : (
+        <div className="list">
+          {visible.map((lead) => (
+            <button key={lead.id} type="button" className="row" onClick={() => open('comment', lead)}>
+              <span className="row-main">
+                <span className="row-title">{lead.name}</span>
+                <span className="row-sub">
+                  {lead.source || 'Local'} · {timeAgo(lead.timestamp)}
+                </span>
+              </span>
+              <span className="row-status">{statusLabel(lead.status)}</span>
+            </button>
+          ))}
+        </div>
+      )}
 
-            {lead.notes && (
-              <div className="bg-[#F8F9FB] rounded-2xl p-4 mb-6 border border-gray-100">
-                <p className="text-[12px] text-slate-500 italic">"{lead.notes}"</p>
-              </div>
+      {selectedLead && activeModal !== 'none' && activeModal !== 'create' && (
+        <div className="sheet open">
+          <div className="inner">
+            <button type="button" className="back" onClick={close}>
+              ← Voltar
+            </button>
+            <h1 className="page-title">{selectedLead.name}</h1>
+            <p className="sub">{selectedLead.email || selectedLead.phone}</p>
+
+            {activeModal === 'comment' && (
+              <>
+                <label className="field">
+                  Nota
+                  <textarea className="field" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="O que foi acordado?" />
+                </label>
+                <button type="button" className="cta" onClick={submitComment}>
+                  Marcar contactada
+                </button>
+                <button type="button" className="cta sec" onClick={() => setActiveModal('schedule')}>
+                  Agendar
+                </button>
+                <button type="button" className="cta sec" onClick={() => setActiveModal('discard')}>
+                  Descartar
+                </button>
+              </>
             )}
 
-            <div className="grid grid-cols-3 gap-3">
-              <button 
-                onClick={() => openDiscardModal(lead)}
-                className="py-3 rounded-2xl bg-red-50 text-red-500 text-[10px] font-bold uppercase active:scale-95 transition-transform"
-              >
-                Descartar
-              </button>
-              <button 
-                onClick={() => openCommentModal(lead)}
-                className="py-3 rounded-2xl bg-green-50 text-green-600 text-[10px] font-bold uppercase active:scale-95 transition-transform"
-              >
-                Contactada
-              </button>
-              <button 
-                onClick={() => openScheduleModal(lead)}
-                className="py-3 rounded-2xl bg-black text-white text-[10px] font-bold uppercase active:scale-95 transition-transform"
-              >
-                Agendar
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* MODAL OVERLAY */}
-      {activeModal !== 'none' && (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center px-4 pb-10 bg-black/40 backdrop-blur-sm transition-all animate-in fade-in">
-          <div className="w-full max-w-md bg-white rounded-[40px] shadow-2xl overflow-hidden animate-in slide-in-from-bottom duration-300">
-            <div className="p-8 max-h-[85vh] overflow-y-auto hide-scrollbar">
-              <div className="flex justify-between items-center mb-8">
-                <h2 className="text-2xl font-bold text-slate-800">
-                  {activeModal === 'comment' ? 'Registar Contacto' : 
-                   activeModal === 'discard' ? 'Descartar Lead' : 'Agendar Consulta'}
-                </h2>
-                <button onClick={() => setActiveModal('none')} className="p-2 bg-slate-100 rounded-full text-slate-400">
-                  <X size={20} />
+            {activeModal === 'discard' && (
+              <>
+                <label className="field">
+                  Motivo
+                  <textarea className="field" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Porque vai descartar?" />
+                </label>
+                <button type="button" className="cta" onClick={submitDiscard}>
+                  Confirmar descarte
                 </button>
-              </div>
+              </>
+            )}
 
-              {(activeModal === 'comment' || activeModal === 'discard') ? (
-                <div className="space-y-6">
-                   <p className="text-slate-500 text-sm">
-                     {activeModal === 'discard' 
-                      ? `Indique o motivo pelo qual vai descartar a lead de ${selectedLead?.name}:`
-                      : `O que foi acordado com ${selectedLead?.name}?`}
-                   </p>
-                   <textarea 
-                     value={comment}
-                     onChange={(e) => setComment(e.target.value)}
-                     placeholder={activeModal === 'discard' ? "Ex: Contacto errado, não tem interesse no momento..." : "Ex: Não atendeu, ligo amanhã às 15h..."}
-                     className={`w-full h-32 rounded-3xl p-6 outline-none border border-transparent transition-all font-medium text-slate-700 ${activeModal === 'discard' ? 'bg-red-50 focus:border-red-200' : 'bg-slate-50 focus:border-blue-200'}`}
-                   />
-                   <button 
-                     onClick={activeModal === 'discard' ? submitDiscard : submitComment}
-                     className={`w-full h-16 text-white font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-transform ${activeModal === 'discard' ? 'bg-red-600' : 'bg-green-600'}`}
-                   >
-                     {activeModal === 'discard' ? <Trash2 size={20} /> : <Check size={20} />}
-                     {activeModal === 'discard' ? 'Confirmar Descarte' : 'Guardar Contacto'}
-                   </button>
+            {activeModal === 'schedule' && (
+              <>
+                <div className="filters">
+                  <button type="button" className={`filter${!isOrto ? ' is-on' : ''}`} onClick={() => { setIsOrto(false); setSelectedDoctor(''); }}>
+                    1ª Consulta
+                  </button>
+                  <button
+                    type="button"
+                    className={`filter${isOrto ? ' is-on' : ''}`}
+                    onClick={() => { setIsOrto(true); setSelectedDoctor('Dra. Mariana Rocha'); }}
+                  >
+                    Ortodontia
+                  </button>
                 </div>
-              ) : (
-                <div className="space-y-6">
-                   <div className="flex bg-slate-100 p-1.5 rounded-2xl">
-                      <button 
-                        onClick={() => {setIsOrto(false); setSelectedDoctor('')}}
-                        className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all ${!isOrto ? 'bg-white shadow-sm text-blue-600' : 'text-slate-500'}`}
-                      >
-                        1ª Consulta
-                      </button>
-                      <button 
-                        onClick={() => {setIsOrto(true); setSelectedDoctor('Dra. Mariana Rocha')}}
-                        className={`flex-1 py-3 text-[10px] font-bold uppercase tracking-wider rounded-xl transition-all ${isOrto ? 'bg-white shadow-sm text-purple-600' : 'text-slate-500'}`}
-                      >
-                        Ortodontia
-                      </button>
-                   </div>
-
-                   <div className="space-y-3">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-2">Selecionar Médico</label>
-                      <div className="grid grid-cols-2 gap-3">
-                        {!isOrto ? (
-                          <>
-                            <button 
-                              onClick={() => setSelectedDoctor('Bruno Aires')}
-                              className={`p-4 rounded-2xl border-2 transition-all flex items-center gap-3 ${selectedDoctor === 'Bruno Aires' ? 'border-blue-500 bg-blue-50/50' : 'border-slate-100 bg-slate-50'}`}
-                            >
-                               <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm"><User size={16} className="text-blue-500" /></div>
-                               <span className="text-[12px] font-bold text-slate-700">Bruno Aires</span>
-                            </button>
-                            <button 
-                              onClick={() => setSelectedDoctor('Joana Amaral')}
-                              className={`p-4 rounded-2xl border-2 transition-all flex items-center gap-3 ${selectedDoctor === 'Joana Amaral' ? 'border-blue-500 bg-blue-50/50' : 'border-slate-100 bg-slate-50'}`}
-                            >
-                               <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm"><User size={16} className="text-blue-500" /></div>
-                               <span className="text-[12px] font-bold text-slate-700">Joana Amaral</span>
-                            </button>
-                          </>
-                        ) : (
-                          <button 
-                            className="col-span-2 p-4 rounded-2xl border-2 border-purple-500 bg-purple-50 flex items-center gap-3"
-                          >
-                             <div className="w-8 h-8 bg-white rounded-lg flex items-center justify-center shadow-sm"><User size={16} className="text-purple-500" /></div>
-                             <span className="text-[12px] font-bold text-slate-700">Dra. Mariana Rocha</span>
-                          </button>
-                        )}
-                      </div>
-                   </div>
-
-                   <div className="space-y-3">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-2">Data e Hora</label>
-                      <div className="relative">
-                        <CalendarIcon className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
-                        <input 
-                          type="datetime-local" 
-                          value={appointmentDate}
-                          onChange={(e) => setAppointmentDate(e.target.value)}
-                          className="w-full h-16 bg-slate-50 rounded-2xl pl-16 pr-6 outline-none border border-transparent focus:border-blue-200 font-bold text-slate-700"
-                        />
-                      </div>
-                   </div>
-
-                   <div className="space-y-3">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest px-2">Comentários Adicionais</label>
-                      <div className="relative">
-                        <MessageSquare className="absolute left-6 top-6 text-slate-400" size={18} />
-                        <textarea 
-                          value={comment}
-                          onChange={(e) => setComment(e.target.value)}
-                          placeholder="Notas sobre o agendamento..."
-                          className="w-full h-32 bg-slate-50 rounded-2xl pl-16 pr-6 pt-5 outline-none border border-transparent focus:border-blue-200 font-medium text-slate-700"
-                        />
-                      </div>
-                   </div>
-
-                   <button 
-                     disabled={!selectedDoctor || !appointmentDate}
-                     onClick={submitSchedule}
-                     className="w-full h-16 bg-black text-white font-bold rounded-2xl flex items-center justify-center gap-2 active:scale-95 transition-transform disabled:opacity-30"
-                   >
-                     Confirmar Marcação
-                   </button>
+                <p className="section-label">Médico</p>
+                <div className="choice-grid">
+                  {!isOrto ? (
+                    <>
+                      {['Bruno Aires', 'Joana Amaral'].map((doc) => (
+                        <button
+                          key={doc}
+                          type="button"
+                          className={`choice${selectedDoctor === doc ? ' is-on' : ''}`}
+                          onClick={() => setSelectedDoctor(doc)}
+                        >
+                          {doc}
+                        </button>
+                      ))}
+                    </>
+                  ) : (
+                    <button type="button" className="choice is-on">
+                      Dra. Mariana Rocha
+                    </button>
+                  )}
                 </div>
-              )}
-            </div>
+                <label className="field">
+                  Data e hora
+                  <input className="field" type="datetime-local" value={appointmentDate} onChange={(e) => setAppointmentDate(e.target.value)} />
+                </label>
+                <label className="field">
+                  Notas
+                  <textarea className="field" value={comment} onChange={(e) => setComment(e.target.value)} />
+                </label>
+                <button type="button" className="cta" disabled={!selectedDoctor || !appointmentDate} onClick={submitSchedule}>
+                  Confirmar marcação
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {activeModal === 'create' && (
+        <div className="sheet open">
+          <div className="inner">
+            <button type="button" className="back" onClick={close}>
+              ← Voltar
+            </button>
+            <h1 className="page-title">Nova lead</h1>
+            <label className="field">
+              Nome
+              <input className="field" value={newLead.name} onChange={(e) => setNewLead({ ...newLead, name: e.target.value })} />
+            </label>
+            <label className="field">
+              Telefone
+              <input className="field" value={newLead.phone} onChange={(e) => setNewLead({ ...newLead, phone: e.target.value })} />
+            </label>
+            <label className="field">
+              Email
+              <input className="field" value={newLead.email} onChange={(e) => setNewLead({ ...newLead, email: e.target.value })} />
+            </label>
+            <label className="field">
+              Notas
+              <textarea className="field" value={newLead.notes} onChange={(e) => setNewLead({ ...newLead, notes: e.target.value })} />
+            </label>
+            <button
+              type="button"
+              className="cta"
+              disabled={!newLead.name.trim() || isSyncing}
+              onClick={() => {
+                onCreateLead(newLead);
+                setNewLead({ name: '', phone: '', email: '', notes: '' });
+                close();
+              }}
+            >
+              Guardar
+            </button>
           </div>
         </div>
       )}
