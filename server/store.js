@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-export const DATA_DIR = join(__dirname, '..', 'data');
+export const DATA_DIR = process.env.LEADS_DATA_DIR || join(__dirname, '..', 'data');
 
 const FILES = {
   leads: join(DATA_DIR, 'leads.json'),
@@ -15,11 +15,31 @@ const DEFAULT_SETTINGS = {
   commissionPercent: 3,
 };
 
-const writeQueue = Promise.resolve();
+let writeQueue = Promise.resolve();
 
 function enqueue(task) {
-  const next = writeQueue.then(task, task);
-  return next;
+  const run = writeQueue.then(task, task);
+  writeQueue = run.then(
+    () => {},
+    () => {}
+  );
+  return run;
+}
+
+const STATUS_RANK = {
+  new: 0,
+  contacted: 1,
+  positive: 2,
+  scheduled: 3,
+  discarded: 4,
+  completed: 5,
+  paid: 6,
+};
+
+function preferStatus(current, incoming) {
+  const currentRank = STATUS_RANK[current] ?? 0;
+  const incomingRank = STATUS_RANK[incoming] ?? 0;
+  return currentRank >= incomingRank ? current || incoming || 'new' : incoming;
 }
 
 async function readJson(path, fallback) {
@@ -94,9 +114,65 @@ export async function createLead(input) {
       value: Number(input.value) || 0,
       source: input.source || 'Manual',
     };
+    if (Array.isArray(input.formFields) && input.formFields.length) lead.formFields = input.formFields;
+    if (input.sourceTab) lead.sourceTab = String(input.sourceTab);
+    if (input.externalId) lead.externalId = String(input.externalId);
     leads.unshift(lead);
     await writeJson(FILES.leads, leads);
     return lead;
+  });
+}
+
+export async function importInboundMetaLeads(incoming) {
+  return enqueue(async () => {
+    const leads = await listLeads();
+    let imported = 0;
+    let updated = 0;
+
+    for (const item of incoming || []) {
+      if (!item?.externalId || !item?.name) continue;
+      const index = leads.findIndex(
+        (lead) => lead.externalId === item.externalId || lead.id === item.externalId
+      );
+
+      if (index === -1) {
+        const id = nextId(leads);
+        leads.unshift({
+          ...item,
+          id,
+          externalId: item.externalId,
+        });
+        imported += 1;
+        continue;
+      }
+
+      const current = leads[index];
+      const status = preferStatus(current.status, item.status);
+      leads[index] = {
+        ...current,
+        name: item.name || current.name,
+        phone: item.phone || current.phone,
+        email: item.email || current.email,
+        timestamp: item.timestamp || current.timestamp,
+        source: item.source || current.source,
+        sourceTab: item.sourceTab || current.sourceTab || 'Inbound META',
+        value: item.value ? item.value : current.value || 0,
+        formFields: item.formFields || current.formFields,
+        notes: String(current.notes || '').trim() ? current.notes : item.notes || '',
+        doctor: String(current.doctor || '').trim() ? current.doctor : item.doctor || '',
+        appointmentDate: String(current.appointmentDate || '').trim()
+          ? current.appointmentDate
+          : item.appointmentDate || '',
+        status,
+        isContacted: Boolean(current.isContacted) || Boolean(item.isContacted) || status !== 'new',
+        id: current.id,
+        externalId: current.externalId,
+      };
+      updated += 1;
+    }
+
+    await writeJson(FILES.leads, leads);
+    return { imported, updated, count: (incoming || []).length };
   });
 }
 

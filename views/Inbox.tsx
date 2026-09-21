@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Lead } from '../types';
+import { filledLeadFields } from '../utils';
 
 interface InboxProps {
   leads: Lead[];
@@ -128,6 +129,7 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
             </button>
             <h1 className="page-title">{selectedLead.name}</h1>
             <p className="sub">{selectedLead.email || selectedLead.phone}</p>
+            <LeadFormFields lead={selectedLead} />
 
             {activeModal === 'comment' && (
               <>
@@ -252,5 +254,20 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
     </div>
   );
 };
+
+function LeadFormFields({ lead }: { lead: Lead }) {
+  const fields = filledLeadFields(lead);
+  if (!fields.length) return null;
+  return (
+    <div className="meta-fields">
+      {fields.map((field) => (
+        <div key={`${field.key}:${field.label}`} className="meta-field">
+          <span className="meta-field-label">{field.label}</span>
+          <span className="meta-field-value">{field.value}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 export default Inbox;

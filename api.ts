@@ -1,5 +1,15 @@
 import { AdminSettings, Lead } from './types';
 
+export interface InboundMetaSyncResult {
+  ok: boolean;
+  sheetId?: string;
+  sheetTab?: string;
+  imported?: number;
+  updated?: number;
+  count?: number;
+  error?: string;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
     ...init,
@@ -20,6 +30,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function fetchLeads() {
   return request<Lead[]>('/api/leads');
+}
+
+export function syncInboundMeta() {
+  return request<InboundMetaSyncResult>('/api/sync/inbound-meta', { method: 'POST' });
 }
 
 export function fetchLead(id: string) {

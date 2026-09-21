@@ -1,5 +1,22 @@
 
-import { Lead } from './types';
+import { Lead, LeadFormField } from './types';
+import {
+  filledLeadFields as filledLeadFieldsJs,
+  humanizeMetaValue as humanizeMetaValueJs,
+  mapDataToLeads as mapDataToLeadsJs,
+} from './shared/inboundMeta.js';
+
+export function humanizeMetaValue(value: unknown): string {
+  return humanizeMetaValueJs(value);
+}
+
+export function mapDataToLeads(data: unknown[]): Lead[] {
+  return mapDataToLeadsJs(data) as Lead[];
+}
+
+export function filledLeadFields(lead: Lead): LeadFormField[] {
+  return filledLeadFieldsJs(lead) as LeadFormField[];
+}
 
 export const formatMonthYear = (date: Date): string => {
   const months = [

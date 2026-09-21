@@ -2,12 +2,14 @@ import express from 'express';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { fetchInboundMetaLeads, SHEET_ID, SHEET_TAB } from './inboundMetaSync.js';
 import {
   addReminder,
   createLead,
   deleteLead,
   getLead,
   getSettings,
+  importInboundMetaLeads,
   listLeads,
   listReminders,
   saveSettings,
@@ -94,6 +96,17 @@ function sanitizeLeadInput(raw = {}) {
   if (body.valor_fechado !== undefined && out.value === undefined) {
     out.value = Number(body.valor_fechado) || 0;
   }
+  if (Array.isArray(body.formFields)) {
+    out.formFields = body.formFields
+      .filter((field) => field && String(field.value ?? '').trim() !== '')
+      .map((field) => ({
+        key: String(field.key || ''),
+        label: String(field.label || ''),
+        value: String(field.value).trim(),
+      }));
+  }
+  if (body.sourceTab !== undefined) out.sourceTab = String(body.sourceTab);
+  if (body.externalId !== undefined) out.externalId = String(body.externalId);
   return out;
 }
 
@@ -111,6 +124,21 @@ export function createApiRouter() {
 
   api.get('/leads', async (_req, res) => {
     res.json(await listLeads());
+  });
+
+  api.post('/sync/inbound-meta', async (_req, res) => {
+    try {
+      const mapped = await fetchInboundMetaLeads();
+      const result = await importInboundMetaLeads(mapped);
+      res.json({
+        ok: true,
+        sheetId: process.env.INBOUND_META_SHEET_ID || SHEET_ID,
+        sheetTab: process.env.INBOUND_META_SHEET_TAB || SHEET_TAB,
+        ...result,
+      });
+    } catch (error) {
+      res.status(502).json({ ok: false, error: error.message || String(error) });
+    }
   });
 
   api.get('/leads/:id', async (req, res) => {

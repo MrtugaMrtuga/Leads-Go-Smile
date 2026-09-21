@@ -1,5 +1,11 @@
 export type LeadStatus = 'new' | 'contacted' | 'discarded' | 'scheduled' | 'positive' | 'completed' | 'paid';
 
+export interface LeadFormField {
+  key: string;
+  label: string;
+  value: string;
+}
+
 export interface Lead {
   id: string;
   externalId: string;
@@ -15,6 +21,8 @@ export interface Lead {
   doctor?: string;
   appointmentDate?: string;
   source?: string;
+  sourceTab?: string;
+  formFields?: LeadFormField[];
 }
 
 export type AppView = 'resumo' | 'inbox' | 'lixo' | 'visitas' | 'contas' | 'admin';

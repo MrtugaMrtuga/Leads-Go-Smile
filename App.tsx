@@ -7,8 +7,8 @@ import Agenda from './views/Agenda';
 import Accounts from './views/Accounts';
 import Admin from './views/Admin';
 import { AppView, Lead, AdminSettings, LeadUpdatePayload } from './types';
-import { formatMonthYear, getLeadsByMonth } from './utils';
-import { createLead, fetchLeads, fetchSettings, saveSettings, sendReminder, updateLead } from './api';
+import { formatMonthYear, getLeadsByMonth, mapDataToLeads } from './utils';
+import { createLead, fetchLeads, fetchSettings, saveSettings, sendReminder, syncInboundMeta, updateLead } from './api';
 
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<AppView>('inbox');
@@ -23,9 +23,20 @@ const App: React.FC = () => {
     setIsLoading(true);
     setFetchError(null);
     try {
+      let sheetWarning: string | null = null;
+      try {
+        await syncInboundMeta();
+      } catch (syncError) {
+        console.error(syncError);
+        sheetWarning = 'Folha Inbound META indisponível';
+      }
       const [nextLeads, nextSettings] = await Promise.all([fetchLeads(), fetchSettings()]);
-      setLeads(nextLeads);
+      setLeads(mapDataToLeads(nextLeads));
       setSettings(nextSettings);
+      if (sheetWarning) {
+        setFetchError(sheetWarning);
+        setTimeout(() => setFetchError((current) => (current === sheetWarning ? null : current)), 4000);
+      }
     } catch (error) {
       console.error(error);
       setFetchError('API local indisponível');

@@ -608,3 +608,27 @@ textarea.field:focus {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+.meta-fields {
+  margin: 8px 0 8px;
+}
+
+.meta-field {
+  padding: 12px 0;
+  border-top: 1px solid var(--line);
+}
+
+.meta-field-label {
+  display: block;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--mute);
+}
+
+.meta-field-value {
+  display: block;
+  margin-top: 2px;
+  font-size: 16px;
+  font-weight: 400;
+  color: #000;
+}
