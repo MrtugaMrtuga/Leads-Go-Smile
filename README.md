@@ -8,6 +8,20 @@ O browser só fala com `/api` no mesmo origin. O segredo do Apps Script fica no 
 
 PIN de acesso: **2000** (sessionStorage `gosmile-leads-unlocked`).
 
+## Pipeline (Inbox, Marcadas, Descartadas)
+
+A cor ao lado do nome e as listas vêm da coluna **Legenda** e do prefixo em **Observações**. Não há coluna nova nem variável nova no Mini.
+
+| UI | Legenda | Observações |
+| --- | --- | --- |
+| Amarelo, inbox, «Não atendeu» ou contactada | `Em processamento` | `[status:processing]` ou `[status:contacted]` |
+| Verde, Marcadas (agendada) | `Marcada` | `[status:scheduled]` |
+| Vermelho, Descartadas | `Descartada` | `[status:discarded]` e `[motivo:…]` obrigatório |
+
+A secção **Estatísticas** no Dashboard é a percentagem de todas as leads (não só do mês): descartadas, marcadas (`scheduled`) e em processamento (`processing` + `contacted`). O mapa completo está em [backend-gas/README.md](./backend-gas/README.md).
+
+Publicar uma versão nova do Apps Script depois deste código. `APPS_SCRIPT_URL` e `APPS_SCRIPT_SECRET` não mudam.
+
 ## Arranque local
 
 **Pré-requisitos:** Node.js 20+
@@ -43,7 +57,7 @@ O servidor Express serve `dist/` e `/api` na mesma porta. Ver [DEPLOY.md](./DEPL
 | POST | `/api/sync/inbound-meta` | Já não importa CSV nem JSON. Devolve a contagem actual da folha |
 | POST | `/api/leads` | Acrescenta uma linha (nome, telefone, email, notas) |
 | GET | `/api/leads/:id` | Lê uma lead (`id` = número da linha) |
-| PATCH / PUT | `/api/leads/:id` | Grava CRM na mesma linha (observações, contactos, consultas, médico, valor, pagamento) |
+| PATCH / PUT | `/api/leads/:id` | Grava CRM na mesma linha (observações, Legenda, motivo, contactos, consultas, médico, valor, pagamento). Descartar sem `motivo` responde 400 |
 | DELETE | `/api/leads/:id` | Recusado (405). As linhas da folha não se apagam por aqui |
 | GET / PUT | `/api/settings` | Comissão local |
 | GET / POST | `/api/reminders` | Lembretes só em disco |

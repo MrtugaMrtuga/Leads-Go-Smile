@@ -75,31 +75,107 @@ export const CRM_KEYS = [
   'observacoes_final',
 ];
 
-const LEAD_STATUSES = ['new', 'contacted', 'discarded', 'scheduled', 'positive', 'completed', 'paid'];
-const STATUS_NOTE = /^\[status:(new|contacted|discarded|scheduled|positive|completed|paid)\]\s*/i;
+const LEAD_STATUSES = ['new', 'contacted', 'processing', 'discarded', 'scheduled', 'positive', 'completed', 'paid'];
+const STATUS_NOTE = /^\[status:(new|contacted|processing|discarded|scheduled|positive|completed|paid)\]\s*/i;
+const MOTIVO_NOTE = /^\[motivo:([^\]]*)\]\s*/i;
+
+export function cleanMotivo(value) {
+  return String(value ?? '')
+    .replace(/[\r\n\]]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
 
 export function splitStatusNote(value) {
-  const text = String(value ?? '').replace(/^\uFEFF/, '').trim();
-  const match = text.match(STATUS_NOTE);
-  if (!match) return { status: '', note: text };
-  return {
-    status: match[1].toLowerCase(),
-    note: text.slice(match[0].length).trim(),
-  };
+  let text = String(value ?? '').replace(/^\uFEFF/, '').trim();
+  let status = '';
+  let motivo = '';
+  for (let guard = 0; guard < 6; guard += 1) {
+    const statusMatch = text.match(STATUS_NOTE);
+    if (statusMatch) {
+      status = statusMatch[1].toLowerCase();
+      text = text.slice(statusMatch[0].length).trim();
+      continue;
+    }
+    const motivoMatch = text.match(MOTIVO_NOTE);
+    if (motivoMatch) {
+      motivo = cleanMotivo(motivoMatch[1]);
+      text = text.slice(motivoMatch[0].length).trim();
+      continue;
+    }
+    break;
+  }
+  return { status, motivo, note: text };
 }
 
-export function formatStatusNote(note, status) {
-  const clean = splitStatusNote(note).note;
+export function formatStatusNote(note, status, motivo) {
+  const parsed = splitStatusNote(note);
+  const clean = parsed.note;
   const normalized = String(status || '').trim().toLowerCase();
-  if (!LEAD_STATUSES.includes(normalized)) return clean;
-  return clean ? `[status:${normalized}]\n${clean}` : `[status:${normalized}]`;
+  const reason = cleanMotivo(motivo === undefined ? parsed.motivo : motivo);
+  const lines = [];
+  if (LEAD_STATUSES.includes(normalized)) lines.push(`[status:${normalized}]`);
+  if (reason) lines.push(`[motivo:${reason}]`);
+  if (!lines.length) return clean;
+  return clean ? `${lines.join('\n')}\n${clean}` : lines.join('\n');
 }
 
-export function mergeObservacoes(currentCell, { status = '', note = '', noteSet = false } = {}) {
+export function mergeObservacoes(currentCell, { status = '', note = '', noteSet = false, motivo = '', motivoSet = false } = {}) {
   const parsed = splitStatusNote(currentCell);
-  const nextNote = noteSet ? splitStatusNote(note).note : parsed.note;
+  const incoming = splitStatusNote(note);
+  const nextNote = noteSet ? incoming.note : parsed.note;
   const nextStatus = status || parsed.status;
-  return formatStatusNote(nextNote, nextStatus);
+  const nextMotivo = motivoSet ? cleanMotivo(motivo || incoming.motivo) : incoming.motivo || parsed.motivo;
+  return formatStatusNote(nextNote, nextStatus, nextMotivo);
+}
+
+/** Legenda values the UI filters on. Empty means a new lead with no pipeline colour. */
+export function statusFromLegenda(value) {
+  const folded = foldHeader(value);
+  if (folded === 'em processamento') return 'processing';
+  if (folded === 'marcada' || folded === 'marcado') return 'scheduled';
+  if (folded === 'descartada' || folded === 'descartado') return 'discarded';
+  return '';
+}
+
+export function legendaForStatus(status) {
+  if (status === 'processing' || status === 'contacted') return 'Em processamento';
+  if (status === 'scheduled') return 'Marcada';
+  if (status === 'discarded') return 'Descartada';
+  if (status === 'new') return '';
+  return null;
+}
+
+export function listBucket(status) {
+  if (status === 'scheduled') return 'marcadas';
+  if (status === 'discarded') return 'descartadas';
+  if (status === 'new' || status === 'contacted' || status === 'processing') return 'inbox';
+  return 'other';
+}
+
+export function pipelineTone(status) {
+  if (status === 'discarded') return 'red';
+  if (status === 'scheduled') return 'green';
+  if (status === 'processing' || status === 'contacted') return 'yellow';
+  return '';
+}
+
+export function pipelineStats(leads) {
+  const list = Array.isArray(leads) ? leads : [];
+  const total = list.length;
+  const discarded = list.filter((lead) => lead?.status === 'discarded').length;
+  const booked = list.filter((lead) => lead?.status === 'scheduled').length;
+  const processing = list.filter((lead) => lead?.status === 'processing' || lead?.status === 'contacted').length;
+  const pct = (count) => (total ? Math.round((count / total) * 1000) / 10 : 0);
+  return {
+    total,
+    discarded,
+    booked,
+    processing,
+    discardedPct: pct(discarded),
+    bookedPct: pct(booked),
+    processingPct: pct(processing),
+  };
 }
 
 const MARKS = new Set(['x', 'sim', 'yes', '1', 'true', '✓', '✔', '✅']);
@@ -276,6 +352,9 @@ function inferInboundStatus(raw) {
   const primary = splitStatusNote(raw.observacoes);
   if (LEAD_STATUSES.includes(primary.status)) return primary.status;
 
+  const fromLegenda = statusFromLegenda(raw.legenda);
+  if (fromLegenda) return fromLegenda;
+
   const pagamento = foldHeader(raw.pagamento);
   if (pagamento === 'pago' || pagamento === 'paga' || pagamento === 'paid') return 'paid';
 
@@ -293,11 +372,17 @@ function inferInboundStatus(raw) {
   const appointment = String(raw.data_primeira_consulta || '').trim();
   if (appointment.length > 2 || notes.includes('marcado') || notes.includes('marcada')) return 'scheduled';
   if (
-    notes.includes('engano') ||
-    notes.includes('não interessa') ||
-    notes.includes('nao interessa') ||
+    notes.includes('não atendeu') ||
+    notes.includes('nao atendeu') ||
     notes.includes('não atende') ||
     notes.includes('nao atende')
+  ) {
+    return 'processing';
+  }
+  if (
+    notes.includes('engano') ||
+    notes.includes('não interessa') ||
+    notes.includes('nao interessa')
   ) {
     return 'discarded';
   }
@@ -346,6 +431,7 @@ function mapRow(indexed, cells, sheetRow) {
   CRM_KEYS.forEach((key) => {
     crm[key] = key === 'observacoes' ? primary.note : raw[key] || '';
   });
+  const discardReason = primary.motivo || '';
 
   const externalId = metaExternalId(raw.telefone, raw.email, timestamp);
   const id = sheetRow ? String(sheetRow) : externalId;
@@ -363,6 +449,7 @@ function mapRow(indexed, cells, sheetRow) {
     timestamp,
     status,
     isContacted: status !== 'new',
+    discardReason,
     notes,
     doctor: raw.medico_orcamento || '',
     appointmentDate: raw.data_primeira_consulta || '',
@@ -415,6 +502,7 @@ function normalizeStoredLead(item, index) {
     timestamp: item.timestamp || item.Data || new Date().toISOString(),
     status: item.status || 'new',
     isContacted: Boolean(item.isContacted),
+    discardReason: item.discardReason ? String(item.discardReason) : '',
     source: item.source || item.Origem || '',
     sourceTab: item.sourceTab || '',
   };

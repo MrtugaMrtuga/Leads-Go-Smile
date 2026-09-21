@@ -42,6 +42,7 @@ const App: React.FC = () => {
   }, [loadLeads]);
 
   const handleLeadAction = async (id: string, updates: Partial<Lead>, extraData?: Partial<LeadUpdatePayload>) => {
+    const motivo = extraData?.motivo ?? updates.discardReason;
     const payload: Partial<Lead> & Record<string, unknown> = {
       ...updates,
       notes: extraData?.comentario ?? updates.notes,
@@ -50,6 +51,10 @@ const App: React.FC = () => {
       value: extraData?.valor_fechado !== undefined ? extraData.valor_fechado : updates.value,
       status: extraData?.status || updates.status,
     };
+    if (motivo !== undefined) {
+      payload.motivo = motivo;
+      payload.discardReason = motivo;
+    }
 
     setLeads((prev) => prev.map((lead) => (lead.id === id ? { ...lead, ...payload } as Lead : lead)));
     setIsSyncing(true);
@@ -116,11 +121,11 @@ const App: React.FC = () => {
   const renderView = () => {
     switch (activeView) {
       case 'resumo':
-        return <Dashboard leads={currentLeads} monthLabel={monthLabel} />;
+        return <Dashboard leads={currentLeads} allLeads={leads} monthLabel={monthLabel} />;
       case 'inbox':
         return (
           <Inbox
-            leads={currentLeads.filter((l) => l.status === 'new' || l.status === 'contacted' || l.status === 'scheduled')}
+            leads={currentLeads}
             onUpdateStatus={handleLeadAction}
             onCreateLead={handleCreateLead}
             onSync={loadLeads}
@@ -183,9 +188,9 @@ const App: React.FC = () => {
         activeView === 'resumo'
           ? 'Dashboard'
           : activeView === 'visitas'
-            ? 'Marcações'
+            ? 'Marcadas'
             : activeView === 'lixo'
-              ? 'Lixo'
+              ? 'Descartadas'
               : activeView === 'contas'
                 ? 'Contas'
                 : activeView === 'admin'

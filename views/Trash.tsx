@@ -1,4 +1,5 @@
 import React from 'react';
+import LeadName from '../components/LeadName';
 import { Lead } from '../types';
 
 interface TrashProps {
@@ -13,14 +14,14 @@ const Trash: React.FC<TrashProps> = ({ leads, onUpdateStatus, monthLabel, isSync
   return (
     <div>
       {leads.length === 0 ? (
-        <p className="center-note">Nenhum item no lixo em {monthLabel.toLowerCase()}.</p>
+        <p className="center-note">Nenhuma lead descartada em {monthLabel.toLowerCase()}.</p>
       ) : (
         <div className="list">
           {leads.map((lead) => (
             <div key={lead.id} className="row">
               <span className="row-main">
-                <span className="row-title">{lead.name}</span>
-                <span className="row-sub">{lead.notes || 'Sem notas'}</span>
+                <LeadName lead={lead} className="row-title" />
+                <span className="row-sub">{lead.discardReason || lead.notes || 'Sem motivo'}</span>
               </span>
               <button
                 type="button"

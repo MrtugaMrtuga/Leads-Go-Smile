@@ -1,4 +1,4 @@
-export type LeadStatus = 'new' | 'contacted' | 'discarded' | 'scheduled' | 'positive' | 'completed' | 'paid';
+export type LeadStatus = 'new' | 'contacted' | 'processing' | 'discarded' | 'scheduled' | 'positive' | 'completed' | 'paid';
 
 export interface LeadFormField {
   key: string;
@@ -15,6 +15,7 @@ export interface Lead {
   timestamp: string;
   status: LeadStatus;
   isContacted: boolean;
+  discardReason?: string;
   value?: number;
   commission?: number;
   notes?: string;
@@ -43,4 +44,5 @@ export interface LeadUpdatePayload {
   valor_fechado?: number;
   status?: LeadStatus;
   data_tratamento?: string;
+  motivo?: string;
 }

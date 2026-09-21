@@ -3,8 +3,11 @@ import test from 'node:test';
 import {
   filledLeadFields,
   humanizeMetaValue,
+  listBucket,
   mapDataToLeads,
   mapSheetCsv,
+  pipelineStats,
+  pipelineTone,
 } from './inboundMeta.js';
 
 const HEADERS = [
@@ -179,6 +182,74 @@ test('status marker is authoritative and hidden from the detail fields', () => {
   const visible = filledLeadFields(lead);
   assert.equal(visible.find((field) => field.key === 'observacoes').value, 'Liguei hoje');
   assert.equal(visible.some((field) => String(field.value).includes('[status:')), false);
+});
+
+test('pipeline markers survive reload and stay off the Meta detail', () => {
+  const row = [...EXAMPLE];
+  row[13] = '[status:discarded]\n[motivo:não interessa]\nliguei ontem';
+  row[25] = 'Descartada';
+  const [lead] = mapSheetCsv(toCsv([HEADERS, row]));
+  assert.equal(lead.status, 'discarded');
+  assert.equal(lead.discardReason, 'não interessa');
+  assert.equal(lead.notes, 'liguei ontem');
+  assert.equal(listBucket(lead.status), 'descartadas');
+  assert.equal(pipelineTone(lead.status), 'red');
+  const visible = filledLeadFields(lead);
+  assert.equal(visible.some((field) => String(field.value).includes('[status:')), false);
+  assert.equal(visible.some((field) => String(field.value).includes('[motivo:')), false);
+  assert.equal(visible.find((field) => field.key === 'observacoes').value, 'Liguei ontem');
+});
+
+test('Legenda and não atendeu stay in the inbox as processing', () => {
+  const [fromLegenda] = mapSheetCsv(
+    toCsv([
+      ['Nome Paciente', 'Legenda'],
+      ['Ana Sem Atender', 'Em processamento'],
+    ])
+  );
+  assert.equal(fromLegenda.status, 'processing');
+  assert.equal(listBucket(fromLegenda.status), 'inbox');
+  assert.equal(pipelineTone(fromLegenda.status), 'yellow');
+
+  const [fromNote] = mapSheetCsv(
+    toCsv([
+      ['Nome Paciente', 'Observações'],
+      ['Bruno Não Atendeu', 'não atendeu à primeira chamada'],
+    ])
+  );
+  assert.equal(fromNote.status, 'processing');
+  assert.equal(listBucket(fromNote.status), 'inbox');
+
+  const [booked] = mapSheetCsv(
+    toCsv([
+      ['Nome Paciente', 'Legenda'],
+      ['Carla Marcada', 'Marcada'],
+    ])
+  );
+  assert.equal(booked.status, 'scheduled');
+  assert.equal(listBucket(booked.status), 'marcadas');
+  assert.equal(pipelineTone(booked.status), 'green');
+});
+
+test('estatísticas are percentages of every lead', () => {
+  const stats = pipelineStats([
+    { status: 'new' },
+    { status: 'processing' },
+    { status: 'contacted' },
+    { status: 'scheduled' },
+    { status: 'discarded' },
+    { status: 'paid' },
+    { status: 'completed' },
+    { status: 'new' },
+    { status: 'scheduled' },
+    { status: 'discarded' },
+  ]);
+  assert.equal(stats.total, 10);
+  assert.equal(stats.discardedPct, 20);
+  assert.equal(stats.bookedPct, 20);
+  assert.equal(stats.processingPct, 20);
+  assert.equal(listBucket('processing'), 'inbox');
+  assert.equal(listBucket('scheduled') === 'inbox', false);
 });
 
 test('portuguese sheet dates stay on the contact day', () => {

@@ -3,10 +3,10 @@
  * Unknown headers are dropped. Meta form questions are not overwritten.
  */
 
-import { COLUMN_DEFS, CRM_KEYS, splitStatusNote } from './inboundMeta.js';
+import { COLUMN_DEFS, CRM_KEYS, cleanMotivo, legendaForStatus, splitStatusNote } from './inboundMeta.js';
 
 const WRITABLE = new Set(CRM_KEYS);
-const STATUSES = new Set(['new', 'contacted', 'discarded', 'scheduled', 'positive', 'completed', 'paid']);
+const STATUSES = new Set(['new', 'contacted', 'processing', 'discarded', 'scheduled', 'positive', 'completed', 'paid']);
 
 const STATUS_ALIASES = {
   pago: 'paid',
@@ -18,7 +18,22 @@ const STATUS_ALIASES = {
   descartada: 'discarded',
   descartado: 'discarded',
   faltou: 'contacted',
+  'em processamento': 'processing',
+  'não atendeu': 'processing',
+  'nao atendeu': 'processing',
+  'não atende': 'processing',
+  'nao atende': 'processing',
+  marcada: 'scheduled',
+  marcado: 'scheduled',
 };
+
+export class PipelineError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'PipelineError';
+    this.statusCode = 400;
+  }
+}
 
 function writableByKey(key) {
   if (!WRITABLE.has(key)) return null;
@@ -73,12 +88,27 @@ export function leadPatchToFields(updates = {}, now = new Date()) {
 
   const status = normalizeStatus(updates.status || updates.estado);
 
+  let motivo = cleanMotivo(updates.motivo ?? updates.discardReason ?? '');
+  let motivoSet = updates.motivo !== undefined || updates.discardReason !== undefined;
+  if (status === 'new') {
+    motivo = '';
+    motivoSet = true;
+  }
+  if (status === 'discarded') {
+    if (!motivo && noteSet) motivo = cleanMotivo(splitStatusNote(note).note);
+    motivoSet = true;
+    if (!motivo) throw new PipelineError('Motivo é obrigatório para descartar');
+    if (noteSet && cleanMotivo(splitStatusNote(note).note) === motivo) note = '';
+  }
+
   if (status && status !== 'new') {
     const stamp = now instanceof Date ? now.toISOString() : new Date(now).toISOString();
     push(writableByKey('primeiro_contacto'), stamp, { ifBlank: true });
   }
   if (status === 'paid') push(writableByKey('pagamento'), 'Pago');
   if (status === 'completed') push(writableByKey('orcamentado'), 'Fechado', { ifBlank: true });
+  const legenda = legendaForStatus(status);
+  if (legenda !== null) push(writableByKey('legenda'), legenda);
 
   const crm = updates.crm && typeof updates.crm === 'object' && !Array.isArray(updates.crm) ? updates.crm : null;
   if (crm) {
@@ -125,6 +155,8 @@ export function leadPatchToFields(updates = {}, now = new Date()) {
     status,
     note: splitStatusNote(note).note,
     noteSet: Boolean(noteSet),
+    motivo,
+    motivoSet: Boolean(motivoSet),
     fields,
   };
 }

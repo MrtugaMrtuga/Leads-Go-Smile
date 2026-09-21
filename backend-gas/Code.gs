@@ -48,7 +48,8 @@ var COLUMN_DEFS = [
   { key: 'observacoes_final', header: 'Observações', occurrence: 2, crm: true }
 ];
 
-var STATUS_NOTE = /^\[status:(new|contacted|discarded|scheduled|positive|completed|paid)\]\s*/i;
+var STATUS_NOTE = /^\[status:(new|contacted|processing|discarded|scheduled|positive|completed|paid)\]\s*/i;
+var MOTIVO_NOTE = /^\[motivo:([^\]]*)\]\s*/i;
 
 function jsonResponse_(payload) {
   return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
@@ -63,26 +64,63 @@ function foldHeader_(value) {
     .replace(/\s+/g, ' ');
 }
 
+function cleanMotivo_(value) {
+  return String(value || '')
+    .replace(/[\r\n\]]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function splitStatusNote_(value) {
   var text = String(value || '').replace(/^\uFEFF/, '').trim();
-  var match = text.match(STATUS_NOTE);
-  if (!match) return { status: '', note: text };
-  return { status: String(match[1]).toLowerCase(), note: text.slice(match[0].length).trim() };
+  var status = '';
+  var motivo = '';
+  for (var guard = 0; guard < 6; guard += 1) {
+    var statusMatch = text.match(STATUS_NOTE);
+    if (statusMatch) {
+      status = String(statusMatch[1]).toLowerCase();
+      text = text.slice(statusMatch[0].length).trim();
+      continue;
+    }
+    var motivoMatch = text.match(MOTIVO_NOTE);
+    if (motivoMatch) {
+      motivo = cleanMotivo_(motivoMatch[1]);
+      text = text.slice(motivoMatch[0].length).trim();
+      continue;
+    }
+    break;
+  }
+  return { status: status, motivo: motivo, note: text };
 }
 
-function formatStatusNote_(note, status) {
-  var clean = splitStatusNote_(note).note;
+function formatStatusNote_(note, status, motivo) {
+  var parsed = splitStatusNote_(note);
+  var clean = parsed.note;
   var normalized = String(status || '').trim().toLowerCase();
-  var allowed = { new: 1, contacted: 1, discarded: 1, scheduled: 1, positive: 1, completed: 1, paid: 1 };
-  if (!allowed[normalized]) return clean;
-  return clean ? '[status:' + normalized + ']\n' + clean : '[status:' + normalized + ']';
+  var allowed = { new: 1, contacted: 1, processing: 1, discarded: 1, scheduled: 1, positive: 1, completed: 1, paid: 1 };
+  var reason = cleanMotivo_(motivo === undefined ? parsed.motivo : motivo);
+  var lines = [];
+  if (allowed[normalized]) lines.push('[status:' + normalized + ']');
+  if (reason) lines.push('[motivo:' + reason + ']');
+  if (!lines.length) return clean;
+  return clean ? lines.join('\n') + '\n' + clean : lines.join('\n');
 }
 
-function mergeObservacoes_(currentCell, status, note, noteSet) {
+function mergeObservacoes_(currentCell, status, note, noteSet, motivo, motivoSet) {
   var parsed = splitStatusNote_(currentCell);
-  var nextNote = noteSet ? splitStatusNote_(note).note : parsed.note;
+  var incoming = splitStatusNote_(note);
+  var nextNote = noteSet ? incoming.note : parsed.note;
   var nextStatus = status || parsed.status;
-  return formatStatusNote_(nextNote, nextStatus);
+  var nextMotivo = motivoSet ? cleanMotivo_(motivo || incoming.motivo) : incoming.motivo || parsed.motivo;
+  return formatStatusNote_(nextNote, nextStatus, nextMotivo);
+}
+
+function statusFromLegenda_(value) {
+  var folded = foldHeader_(value);
+  if (folded === 'em processamento') return 'processing';
+  if (folded === 'marcada' || folded === 'marcado') return 'scheduled';
+  if (folded === 'descartada' || folded === 'descartado') return 'discarded';
+  return '';
 }
 
 function secretsMatch_(provided) {
@@ -179,6 +217,8 @@ function isFilled_(value) {
 function inferStatus_(raw) {
   var primary = splitStatusNote_(raw.observacoes);
   if (primary.status) return primary.status;
+  var fromLegenda = statusFromLegenda_(raw.legenda);
+  if (fromLegenda) return fromLegenda;
   var pagamento = foldHeader_(raw.pagamento);
   if (pagamento === 'pago' || pagamento === 'paga' || pagamento === 'paid') return 'paid';
   var notes = (primary.note + ' ' + (raw.observacoes_final || '')).toLowerCase();
@@ -194,11 +234,17 @@ function inferStatus_(raw) {
   var appointment = String(raw.data_primeira_consulta || '').trim();
   if (appointment.length > 2 || notes.indexOf('marcado') !== -1 || notes.indexOf('marcada') !== -1) return 'scheduled';
   if (
-    notes.indexOf('engano') !== -1 ||
-    notes.indexOf('não interessa') !== -1 ||
-    notes.indexOf('nao interessa') !== -1 ||
+    notes.indexOf('não atendeu') !== -1 ||
+    notes.indexOf('nao atendeu') !== -1 ||
     notes.indexOf('não atende') !== -1 ||
     notes.indexOf('nao atende') !== -1
+  ) {
+    return 'processing';
+  }
+  if (
+    notes.indexOf('engano') !== -1 ||
+    notes.indexOf('não interessa') !== -1 ||
+    notes.indexOf('nao interessa') !== -1
   ) {
     return 'discarded';
   }
@@ -244,6 +290,7 @@ function buildLead_(headers, values, sheetRow) {
     timestamp: raw.data_contacto || '',
     notes: primary.note || raw.observacoes_final || '',
     status: status,
+    discardReason: primary.motivo || '',
     isContacted: status !== 'new',
     sourceTab: SHEET_TAB,
     formFields: formFields,
@@ -291,16 +338,25 @@ function applyFields_(sheet, rowNumber, fields) {
   return applied;
 }
 
-function writeObservacoes_(sheet, rowNumber, status, note, noteSet) {
-  if (!noteSet && !status) return null;
+function writeObservacoes_(sheet, rowNumber, status, note, noteSet, motivo, motivoSet) {
+  if (!noteSet && !status && !motivoSet) return null;
   var lastColumn = Math.max(sheet.getLastColumn(), 1);
   var headers = trimRow_(sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0]);
   var column = findColumn_(indexHeaders_(headers), 'Observações', 1);
   if (!column) return null;
   var cell = sheet.getRange(rowNumber, column.index + 1);
-  var next = mergeObservacoes_(cell.getDisplayValue(), status, note, Boolean(noteSet));
+  var next = mergeObservacoes_(cell.getDisplayValue(), status, note, Boolean(noteSet), motivo, Boolean(motivoSet));
   cell.setValue(next);
   return next;
+}
+
+function previewObservacoes_(sheet, rowNumber, status, note, noteSet, motivo, motivoSet) {
+  var lastColumn = Math.max(sheet.getLastColumn(), 1);
+  var headers = trimRow_(sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0]);
+  var column = findColumn_(indexHeaders_(headers), 'Observações', 1);
+  if (!column) return '';
+  var cell = sheet.getRange(rowNumber, column.index + 1);
+  return mergeObservacoes_(cell.getDisplayValue(), status, note, Boolean(noteSet), motivo, Boolean(motivoSet));
 }
 
 function withLock_(fn) {
@@ -320,8 +376,14 @@ function updateLead_(body) {
     var sheet = getInboundSheet_();
     if (rowNumber > sheet.getLastRow()) throw new Error('Lead não encontrada');
     var status = String(body.status || '').trim().toLowerCase();
+    var noteSet = Boolean(body.noteSet);
+    var motivoSet = Boolean(body.motivoSet);
+    if (status === 'discarded') {
+      var preview = previewObservacoes_(sheet, rowNumber, status, body.note || '', noteSet, body.motivo || '', true);
+      if (!splitStatusNote_(preview).motivo) throw new Error('Motivo é obrigatório para descartar');
+    }
     applyFields_(sheet, rowNumber, body.fields || []);
-    writeObservacoes_(sheet, rowNumber, status, body.note || '', Boolean(body.noteSet));
+    writeObservacoes_(sheet, rowNumber, status, body.note || '', noteSet, body.motivo || '', motivoSet);
     SpreadsheetApp.flush();
     var table = readTable_(sheet);
     var match = null;

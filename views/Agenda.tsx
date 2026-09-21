@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import LeadName from '../components/LeadName';
 import { Lead } from '../types';
 import { formatCurrency } from '../utils';
 
@@ -25,14 +26,14 @@ const Agenda: React.FC<AgendaProps> = ({ leads, onUpdateStatus, onSendReminder, 
   return (
     <div>
       {leads.length === 0 ? (
-        <p className="center-note">Nenhuma marcação em {monthLabel.toLowerCase()}.</p>
+        <p className="center-note">Nenhuma lead marcada em {monthLabel.toLowerCase()}.</p>
       ) : (
         <div>
           {leads.map((lead) => (
             <button key={lead.id} type="button" className="day-line" onClick={() => { setSelected(lead); setBudget(''); }}>
               <span className="day-line-when">{formatWhen(lead.appointmentDate)}</span>
               <span>
-                <span className="day-line-act">{lead.name}</span>
+                <LeadName lead={lead} className="day-line-act" />
                 <span className="day-line-sub">{lead.doctor || 'Médico a definir'}</span>
               </span>
               <span className="chevron">›</span>
@@ -47,7 +48,9 @@ const Agenda: React.FC<AgendaProps> = ({ leads, onUpdateStatus, onSendReminder, 
             <button type="button" className="back" onClick={() => setSelected(null)}>
               ← Voltar
             </button>
-            <h1 className="page-title">{selected.name}</h1>
+            <h1 className="page-title">
+              <LeadName lead={selected} className="name-line" />
+            </h1>
             <p className="sub">
               {selected.appointmentDate || 'Data a definir'} · {selected.doctor || 'Sem médico'}
             </p>

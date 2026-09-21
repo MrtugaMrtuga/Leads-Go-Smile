@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
+import LeadName from '../components/LeadName';
 import { Lead } from '../types';
-import { filledLeadFields } from '../utils';
+import { filledLeadFields, listBucket } from '../utils';
 
 interface InboxProps {
   leads: Lead[];
@@ -11,11 +12,11 @@ interface InboxProps {
   isSyncing?: boolean;
 }
 
-type Filter = 'todos' | 'novos' | 'contactados';
+type Filter = 'inbox' | 'marcadas' | 'descartadas';
 type ModalType = 'none' | 'comment' | 'discard' | 'schedule' | 'create';
 
 const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSyncing }) => {
-  const [filter, setFilter] = useState<Filter>('todos');
+  const [filter, setFilter] = useState<Filter>('inbox');
   const [activeModal, setActiveModal] = useState<ModalType>('none');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [newLead, setNewLead] = useState({ name: '', phone: '', email: '', notes: '' });
@@ -24,17 +25,13 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
   const [selectedDoctor, setSelectedDoctor] = useState('');
   const [isOrto, setIsOrto] = useState(false);
 
-  const visible = useMemo(() => {
-    if (filter === 'novos') return leads.filter((l) => l.status === 'new');
-    if (filter === 'contactados') return leads.filter((l) => l.status === 'contacted');
-    return leads;
-  }, [leads, filter]);
+  const visible = useMemo(() => leads.filter((lead) => listBucket(lead.status) === filter), [leads, filter]);
 
   const statusLabel = (status: Lead['status']) => {
     if (status === 'new') return 'Novo';
-    if (status === 'contacted') return 'Contactado';
-    if (status === 'scheduled') return 'Marcado';
-    if (status === 'discarded') return 'Perdido';
+    if (status === 'contacted' || status === 'processing') return 'Em processamento';
+    if (status === 'scheduled') return 'Marcada';
+    if (status === 'discarded') return 'Descartada';
     return status;
   };
 
@@ -67,9 +64,21 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
     close();
   };
 
+  const submitMissed = () => {
+    if (!selectedLead) return;
+    onUpdateStatus(selectedLead.id, { status: 'processing', isContacted: true }, { status: 'processing' });
+    close();
+  };
+
   const submitDiscard = () => {
     if (!selectedLead) return;
-    onUpdateStatus(selectedLead.id, { status: 'discarded', notes: comment }, { estado: 'NÃO INTERESSADA', comentario: comment });
+    const motivo = comment.trim();
+    if (!motivo) return;
+    onUpdateStatus(
+      selectedLead.id,
+      { status: 'discarded', discardReason: motivo },
+      { status: 'discarded', motivo }
+    );
     close();
   };
 
@@ -86,14 +95,14 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
   return (
     <div>
       <div className="filters">
-        <button type="button" className={`filter${filter === 'todos' ? ' is-on' : ''}`} onClick={() => setFilter('todos')}>
-          Todos
+        <button type="button" className={`filter${filter === 'inbox' ? ' is-on' : ''}`} onClick={() => setFilter('inbox')}>
+          Inbox
         </button>
-        <button type="button" className={`filter${filter === 'novos' ? ' is-on' : ''}`} onClick={() => setFilter('novos')}>
-          Novos
+        <button type="button" className={`filter${filter === 'marcadas' ? ' is-on' : ''}`} onClick={() => setFilter('marcadas')}>
+          Marcadas
         </button>
-        <button type="button" className={`filter${filter === 'contactados' ? ' is-on' : ''}`} onClick={() => setFilter('contactados')}>
-          Contactados
+        <button type="button" className={`filter${filter === 'descartadas' ? ' is-on' : ''}`} onClick={() => setFilter('descartadas')}>
+          Descartadas
         </button>
       </div>
 
@@ -104,15 +113,19 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
       </div>
 
       {visible.length === 0 ? (
-        <p className="center-note">Nenhuma lead nesta lista.</p>
+        <p className="center-note">
+          {filter === 'marcadas' ? 'Nenhuma lead marcada.' : filter === 'descartadas' ? 'Nenhuma lead descartada.' : 'Nenhuma lead na inbox.'}
+        </p>
       ) : (
         <div className="list">
           {visible.map((lead) => (
             <button key={lead.id} type="button" className="row" onClick={() => open('comment', lead)}>
               <span className="row-main">
-                <span className="row-title">{lead.name}</span>
+                <LeadName lead={lead} className="row-title" />
                 <span className="row-sub">
-                  {lead.source || 'Local'} · {timeAgo(lead.timestamp)}
+                  {lead.status === 'discarded' && lead.discardReason
+                    ? lead.discardReason
+                    : `${lead.source || 'Local'} · ${timeAgo(lead.timestamp)}`}
                 </span>
               </span>
               <span className="row-status">{statusLabel(lead.status)}</span>
@@ -127,8 +140,11 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
             <button type="button" className="back" onClick={close}>
               ← Voltar
             </button>
-            <h1 className="page-title">{selectedLead.name}</h1>
+            <h1 className="page-title">
+              <LeadName lead={selectedLead} className="name-line" />
+            </h1>
             <p className="sub">{selectedLead.email || selectedLead.phone}</p>
+            {selectedLead.discardReason ? <p className="sub">Motivo: {selectedLead.discardReason}</p> : null}
             <LeadFormFields lead={selectedLead} />
 
             {activeModal === 'comment' && (
@@ -139,6 +155,9 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
                 </label>
                 <button type="button" className="cta" onClick={submitComment}>
                   Marcar contactada
+                </button>
+                <button type="button" className="cta sec" onClick={submitMissed}>
+                  Não atendeu
                 </button>
                 <button type="button" className="cta sec" onClick={() => setActiveModal('schedule')}>
                   Agendar
@@ -155,7 +174,7 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
                   Motivo
                   <textarea className="field" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Porque vai descartar?" />
                 </label>
-                <button type="button" className="cta" onClick={submitDiscard}>
+                <button type="button" className="cta" disabled={!comment.trim()} onClick={submitDiscard}>
                   Confirmar descarte
                 </button>
               </>

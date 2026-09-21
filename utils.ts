@@ -3,7 +3,10 @@ import { Lead, LeadFormField } from './types';
 import {
   filledLeadFields as filledLeadFieldsJs,
   humanizeMetaValue as humanizeMetaValueJs,
+  listBucket as listBucketJs,
   mapDataToLeads as mapDataToLeadsJs,
+  pipelineStats as pipelineStatsJs,
+  pipelineTone as pipelineToneJs,
 } from './shared/inboundMeta.js';
 
 export function humanizeMetaValue(value: unknown): string {
@@ -16,6 +19,26 @@ export function mapDataToLeads(data: unknown[]): Lead[] {
 
 export function filledLeadFields(lead: Lead): LeadFormField[] {
   return filledLeadFieldsJs(lead) as LeadFormField[];
+}
+
+export function listBucket(status: Lead['status']) {
+  return listBucketJs(status) as 'inbox' | 'marcadas' | 'descartadas' | 'other';
+}
+
+export function pipelineTone(status: Lead['status']) {
+  return pipelineToneJs(status) as '' | 'yellow' | 'green' | 'red';
+}
+
+export function pipelineStats(leads: Lead[]) {
+  return pipelineStatsJs(leads) as {
+    total: number;
+    discarded: number;
+    booked: number;
+    processing: number;
+    discardedPct: number;
+    bookedPct: number;
+    processingPct: number;
+  };
 }
 
 export const formatMonthYear = (date: Date): string => {
@@ -50,7 +73,7 @@ export const inferStatus = (item: any): any => {
   const appointment = item['Data Primeira Consulta'] || item.data_consulta || item.appointment_date;
 
   // Respeita status explícito quando vem da nova tabela
-  if (['paid', 'completed', 'positive', 'scheduled', 'discarded', 'contacted', 'new'].includes(rawStatus)) {
+  if (['paid', 'completed', 'positive', 'scheduled', 'discarded', 'processing', 'contacted', 'new'].includes(rawStatus)) {
     return rawStatus;
   }
 
@@ -58,8 +81,12 @@ export const inferStatus = (item: any): any => {
     return 'scheduled';
   }
 
+  if (notes.includes('não atende') || notes.includes('nao atende') || notes.includes('não atendeu') || notes.includes('nao atendeu')) {
+    return 'processing';
+  }
+
   const discardKeywords = [
-    'engano', 'não atende', 'nao atende', 'não interessa', 'nao interessa',
+    'engano', 'não interessa', 'nao interessa',
     'desligou', 'longe', 'errado', 'não precisa', 'nao precisa', 'incorrecto', 'falecido'
   ];
 
