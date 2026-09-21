@@ -77,5 +77,5 @@ export function sendReminder(lead: Lead) {
 }
 
 export function fetchHealth() {
-  return request<{ ok: boolean; app: string; host: string }>('/api/health');
+  return request<{ ok: boolean; app: string; host: string; storage?: string; configured?: boolean; sheetTab?: string }>('/api/health');
 }

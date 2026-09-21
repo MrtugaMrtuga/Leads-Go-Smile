@@ -2,19 +2,16 @@ import express from 'express';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fetchInboundMetaLeads, SHEET_ID, SHEET_TAB } from './inboundMetaSync.js';
+import { SHEET_TAB } from '../shared/inboundMeta.js';
 import {
-  addReminder,
-  createLead,
-  deleteLead,
-  getLead,
-  getSettings,
-  importInboundMetaLeads,
-  listLeads,
-  listReminders,
-  saveSettings,
-  updateLead,
-} from './store.js';
+  appsScriptConfig,
+  createInboundLead,
+  getInboundLead,
+  listInboundLeads,
+  SheetError,
+  updateInboundLead,
+} from './sheetClient.js';
+import { addReminder, getSettings, listReminders, retireLeadsJson, saveSettings } from './store.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(__dirname, '..');
@@ -88,7 +85,11 @@ function sanitizeLeadInput(raw = {}) {
     const status = String(body.status);
     if (ALLOWED_STATUSES.has(status)) out.status = status;
   }
-  if (body.comentario !== undefined && out.notes === undefined) out.notes = String(body.comentario);
+  if (body.comentario !== undefined && out.notes === undefined) {
+    out.notes = String(body.comentario);
+    out.noteSet = true;
+  }
+  if (body.notes !== undefined) out.noteSet = true;
   if (body.medico !== undefined && out.doctor === undefined) out.doctor = String(body.medico);
   if (body.data_consulta !== undefined && out.appointmentDate === undefined) {
     out.appointmentDate = String(body.data_consulta);
@@ -107,44 +108,66 @@ function sanitizeLeadInput(raw = {}) {
   }
   if (body.sourceTab !== undefined) out.sourceTab = String(body.sourceTab);
   if (body.externalId !== undefined) out.externalId = String(body.externalId);
+  if (body.crm && typeof body.crm === 'object' && !Array.isArray(body.crm)) out.crm = body.crm;
+  if (body.fields && typeof body.fields === 'object') out.fields = body.fields;
   return out;
+}
+
+function sendSheetError(res, error) {
+  const status = error instanceof SheetError ? error.statusCode : 502;
+  const message = error?.message || 'Folha Inbound META indisponível';
+  res.status(status).json({ error: message });
 }
 
 export function createApiRouter() {
   const api = express.Router();
 
   api.get('/health', (_req, res) => {
+    const config = appsScriptConfig();
     res.json({
       ok: true,
       app: 'GoSmile Leads',
       host: 'leads.evob.org',
-      storage: 'local-json',
+      storage: 'apps-script',
+      sheetTab: SHEET_TAB,
+      configured: config.configured,
     });
   });
 
   api.get('/leads', async (_req, res) => {
-    res.json(await listLeads());
+    try {
+      const { leads } = await listInboundLeads();
+      res.json(leads);
+    } catch (error) {
+      sendSheetError(res, error);
+    }
   });
 
   api.post('/sync/inbound-meta', async (_req, res) => {
     try {
-      const mapped = await fetchInboundMetaLeads();
-      const result = await importInboundMetaLeads(mapped);
+      const { leads, configured } = await listInboundLeads();
       res.json({
         ok: true,
-        sheetId: process.env.INBOUND_META_SHEET_ID || SHEET_ID,
-        sheetTab: process.env.INBOUND_META_SHEET_TAB || SHEET_TAB,
-        ...result,
+        storage: 'apps-script',
+        configured,
+        sheetTab: SHEET_TAB,
+        count: leads.length,
+        imported: 0,
+        updated: 0,
       });
     } catch (error) {
-      res.status(502).json({ ok: false, error: error.message || String(error) });
+      res.status(error.statusCode || 502).json({ ok: false, error: error.message || String(error) });
     }
   });
 
   api.get('/leads/:id', async (req, res) => {
-    const lead = await getLead(req.params.id);
-    if (!lead) return res.status(404).json({ error: 'Lead não encontrada' });
-    res.json(lead);
+    try {
+      const lead = await getInboundLead(req.params.id);
+      if (!lead) return res.status(404).json({ error: 'Lead não encontrada' });
+      res.json(lead);
+    } catch (error) {
+      sendSheetError(res, error);
+    }
   });
 
   api.post('/leads', async (req, res) => {
@@ -152,24 +175,30 @@ export function createApiRouter() {
     if (!String(input.name || '').trim()) {
       return res.status(400).json({ error: 'Nome é obrigatório' });
     }
-    const lead = await createLead(input);
-    res.status(201).json(lead);
+    try {
+      const lead = await createInboundLead(input);
+      res.status(201).json(lead);
+    } catch (error) {
+      sendSheetError(res, error);
+    }
   });
 
   async function patchLead(req, res) {
     const updates = sanitizeLeadInput(req.body);
-    const lead = await updateLead(req.params.id, updates);
-    if (!lead) return res.status(404).json({ error: 'Lead não encontrada' });
-    res.json(lead);
+    try {
+      const lead = await updateInboundLead(req.params.id, updates);
+      if (!lead) return res.status(404).json({ error: 'Lead não encontrada' });
+      res.json(lead);
+    } catch (error) {
+      sendSheetError(res, error);
+    }
   }
 
   api.patch('/leads/:id', patchLead);
   api.put('/leads/:id', patchLead);
 
-  api.delete('/leads/:id', async (req, res) => {
-    const ok = await deleteLead(req.params.id);
-    if (!ok) return res.status(404).json({ error: 'Lead não encontrada' });
-    res.status(204).end();
+  api.delete('/leads/:id', (_req, res) => {
+    res.status(405).json({ error: 'As linhas de Inbound META não se apagam por aqui.' });
   });
 
   api.get('/settings', async (_req, res) => {
@@ -186,7 +215,12 @@ export function createApiRouter() {
 
   api.post('/reminders', async (req, res) => {
     const leadId = String(req.body?.leadId || req.body?.id || '');
-    const lead = leadId ? await getLead(leadId) : null;
+    let lead = null;
+    try {
+      lead = leadId ? await getInboundLead(leadId) : null;
+    } catch (error) {
+      return sendSheetError(res, error);
+    }
     if (!lead) return res.status(404).json({ error: 'Lead não encontrada' });
     const reminder = await addReminder({
       leadId: lead.id,
@@ -208,6 +242,14 @@ export function createApp() {
   const app = express();
   app.disable('x-powered-by');
   app.use(express.json({ limit: '1mb' }));
+  app.use(async (_req, _res, next) => {
+    try {
+      await retireLeadsJson();
+    } catch (error) {
+      console.error('leads.json', error.message);
+    }
+    next();
+  });
   app.use('/api', createApiRouter());
 
   if (isProd && existsSync(DIST)) {

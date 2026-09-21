@@ -1,6 +1,6 @@
 # Deploy no Mac Mini — GoSmile Leads
 
-Alvo: **https://leads.evob.org** na porta **3040**, PWA instalável, dados só em disco.
+Alvo: **https://leads.evob.org** na porta **3040**, PWA instalável. As leads vivem na aba **Inbound META** (Apps Script). Comissão e lembretes continuam em disco.
 
 ## 1. Requisitos
 
@@ -17,22 +17,29 @@ npm ci
 npm run build
 ```
 
-Confirme que `data/` é gravável pelo utilizador do serviço.
+Confirme que `data/` é gravável pelo utilizador do serviço (definições e lembretes). As leads não vêm desse diretório.
 
 ## 3. Arranque
 
+Publique primeiro o Apps Script ([backend-gas/README.md](./backend-gas/README.md)). Depois:
+
 ```bash
-PORT=3040 NODE_ENV=production npm start
+PORT=3040 NODE_ENV=production \
+  APPS_SCRIPT_URL='https://script.google.com/macros/s/…/exec' \
+  APPS_SCRIPT_SECRET='o mesmo valor da propriedade do script' \
+  npm start
 ```
+
+Estas duas variáveis ficam só no Mini (launchd). Não as meta no frontend.
 
 Teste local:
 
 ```bash
 curl -s http://127.0.0.1:3040/api/health
-# {"ok":true,"app":"GoSmile Leads","host":"leads.evob.org","storage":"local-json"}
+# {"ok":true,"app":"GoSmile Leads","host":"leads.evob.org","storage":"apps-script","sheetTab":"Inbound META","configured":true}
 ```
 
-A UI e a API partilham a mesma origem. Não configure webhooks, Gemini, Apps Script nem Firebase.
+A UI e a API partilham a mesma origem. Não há projecto Google Cloud, conta de serviço nem Firebase. Sem `APPS_SCRIPT_URL` / `APPS_SCRIPT_SECRET`, a lista vem vazia (`configured: false`) em vez do JSON antigo.
 
 ## 4. launchd (sobe no login)
 
@@ -98,10 +105,10 @@ No Safari ou Chrome, abra https://leads.evob.org, introduza o PIN **2000**, depo
 
 ## 7. Cópias de segurança
 
-Faça backup de `data/` (Time Machine ou `rsync`). Esse diretório é a base de dados.
+A base das leads é a Google Sheet (aba Inbound META). `data/leads.json` é esvaziado no arranque e não deve ser restaurado como fonte. Faça backup de `data/settings.json` e `data/reminders.json` se quiser guardar comissão e lembretes.
 
 ```bash
-rsync -a data/ /Volumes/Backup/evault-leads-data/
+rsync -a data/settings.json data/reminders.json /Volumes/Backup/evault-leads-data/
 ```
 
 ## 8. Actualizar

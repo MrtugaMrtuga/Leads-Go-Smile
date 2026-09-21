@@ -49,6 +49,59 @@ const CHANNELS = [
   ['website', 'Website'],
 ];
 
+/** CRM columns that the app may write. Meta question columns stay read-only. */
+export const CRM_KEYS = [
+  'primeiro_contacto',
+  'data_segundo_contacto',
+  'segundo_contacto',
+  'observacoes',
+  'data_primeira_consulta',
+  'data_proxima_consulta',
+  'numero_paciente',
+  'localizacao',
+  'idade',
+  'realizada',
+  'medico_orcamento',
+  'orcamentado',
+  'pagamento',
+  'financiamento',
+  'valor_real_bruto',
+  'legenda',
+  'facebook',
+  'google_ads',
+  'instagram',
+  'messenger',
+  'website',
+  'observacoes_final',
+];
+
+const LEAD_STATUSES = ['new', 'contacted', 'discarded', 'scheduled', 'positive', 'completed', 'paid'];
+const STATUS_NOTE = /^\[status:(new|contacted|discarded|scheduled|positive|completed|paid)\]\s*/i;
+
+export function splitStatusNote(value) {
+  const text = String(value ?? '').replace(/^\uFEFF/, '').trim();
+  const match = text.match(STATUS_NOTE);
+  if (!match) return { status: '', note: text };
+  return {
+    status: match[1].toLowerCase(),
+    note: text.slice(match[0].length).trim(),
+  };
+}
+
+export function formatStatusNote(note, status) {
+  const clean = splitStatusNote(note).note;
+  const normalized = String(status || '').trim().toLowerCase();
+  if (!LEAD_STATUSES.includes(normalized)) return clean;
+  return clean ? `[status:${normalized}]\n${clean}` : `[status:${normalized}]`;
+}
+
+export function mergeObservacoes(currentCell, { status = '', note = '', noteSet = false } = {}) {
+  const parsed = splitStatusNote(currentCell);
+  const nextNote = noteSet ? splitStatusNote(note).note : parsed.note;
+  const nextStatus = status || parsed.status;
+  return formatStatusNote(nextNote, nextStatus);
+}
+
 const MARKS = new Set(['x', 'sim', 'yes', '1', 'true', '✓', '✔', '✅']);
 
 export function foldHeader(value) {
@@ -89,12 +142,15 @@ export function humanizeMetaValue(value) {
 export function filledLeadFields(lead) {
   const fields = Array.isArray(lead?.formFields) ? lead.formFields : [];
   return fields
-    .filter((field) => String(field?.value ?? '').trim() !== '')
-    .map((field) => ({
-      key: String(field.key || field.label || ''),
-      label: String(field.label || field.key || ''),
-      value: humanizeMetaValue(field.value),
-    }));
+    .map((field) => {
+      const note = splitStatusNote(field?.value).note;
+      return {
+        key: String(field?.key || field?.label || ''),
+        label: String(field?.label || field?.key || ''),
+        value: humanizeMetaValue(note),
+      };
+    })
+    .filter((field) => field.value.trim() !== '');
 }
 
 export function parseCsv(text) {
@@ -179,7 +235,23 @@ function parseMoney(value) {
 function parseTimestamp(value) {
   const text = String(value ?? '').trim();
   if (!text) return new Date().toISOString();
-  const date = new Date(text.includes('T') ? text : text.replace(' ', 'T'));
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
+    const iso = new Date(text.includes('T') ? text : text.replace(' ', 'T'));
+    if (!Number.isNaN(iso.getTime())) return iso.toISOString();
+  }
+  const match = text.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})(?:[ T](\d{1,2}):(\d{2}))?/);
+  if (match) {
+    const day = Number(match[1]);
+    const month = Number(match[2]);
+    const year = Number(match[3]);
+    const hour = Number(match[4] || 0);
+    const minute = Number(match[5] || 0);
+    const local = new Date(year, month - 1, day, hour, minute);
+    if (local.getFullYear() === year && local.getMonth() === month - 1 && local.getDate() === day) {
+      return local.toISOString();
+    }
+  }
+  const date = new Date(text);
   if (!Number.isNaN(date.getTime())) return date.toISOString();
   return text;
 }
@@ -201,7 +273,23 @@ function channelSource(raw) {
 }
 
 function inferInboundStatus(raw) {
-  const notes = `${raw.observacoes || ''} ${raw.observacoes_final || ''}`.toLowerCase();
+  const primary = splitStatusNote(raw.observacoes);
+  if (LEAD_STATUSES.includes(primary.status)) return primary.status;
+
+  const pagamento = foldHeader(raw.pagamento);
+  if (pagamento === 'pago' || pagamento === 'paga' || pagamento === 'paid') return 'paid';
+
+  const notes = `${primary.note} ${raw.observacoes_final || ''}`.toLowerCase();
+  const orcamento = foldHeader(raw.orcamentado);
+  if (
+    notes.includes('venda fechada') ||
+    notes.includes('fechado no valor') ||
+    orcamento === 'fechado' ||
+    orcamento === 'fechada'
+  ) {
+    return 'completed';
+  }
+
   const appointment = String(raw.data_primeira_consulta || '').trim();
   if (appointment.length > 2 || notes.includes('marcado') || notes.includes('marcada')) return 'scheduled';
   if (
@@ -217,7 +305,7 @@ function inferInboundStatus(raw) {
   return 'new';
 }
 
-function mapRow(indexed, cells) {
+function mapRow(indexed, cells, sheetRow) {
   const raw = {};
   const used = new Set();
 
@@ -232,11 +320,13 @@ function mapRow(indexed, cells) {
   if (!name) return null;
 
   const timestamp = parseTimestamp(raw.data_contacto);
+  const primary = splitStatusNote(raw.observacoes);
   const formFields = [];
 
   COLUMN_DEFS.forEach((def) => {
-    if (!isFilled(raw[def.key])) return;
-    formFields.push({ key: def.key, label: def.header, value: raw[def.key] });
+    const value = def.key === 'observacoes' ? primary.note : raw[def.key];
+    if (!isFilled(value)) return;
+    formFields.push({ key: def.key, label: def.header, value });
   });
 
   indexed.forEach((column) => {
@@ -251,16 +341,28 @@ function mapRow(indexed, cells) {
   });
 
   const status = inferInboundStatus(raw);
-  const notes = raw.observacoes || raw.observacoes_final || '';
+  const notes = primary.note || raw.observacoes_final || '';
+  const crm = {};
+  CRM_KEYS.forEach((key) => {
+    crm[key] = key === 'observacoes' ? primary.note : raw[key] || '';
+  });
+
+  const externalId = metaExternalId(raw.telefone, raw.email, timestamp);
+  const id = sheetRow ? String(sheetRow) : externalId;
 
   return {
-    externalId: metaExternalId(raw.telefone, raw.email, timestamp),
+    id,
+    row: sheetRow || null,
+    externalId,
+    nome: name,
+    telefone: raw.telefone || '',
+    email: raw.email || '',
+    dataContacto: timestamp,
     name,
     phone: raw.telefone || '',
-    email: raw.email || '',
     timestamp,
     status,
-    isContacted: status !== 'new' || Boolean(raw.primeiro_contacto),
+    isContacted: status !== 'new',
     notes,
     doctor: raw.medico_orcamento || '',
     appointmentDate: raw.data_primeira_consulta || '',
@@ -268,7 +370,13 @@ function mapRow(indexed, cells) {
     source: channelSource(raw),
     sourceTab: SHEET_TAB,
     formFields,
+    crm,
   };
+}
+
+export function leadFromSheetRow(headers, values, sheetRow) {
+  if (!Array.isArray(headers)) return null;
+  return mapRow(indexHeaders(headers), Array.isArray(values) ? values : [], sheetRow);
 }
 
 export function mapSheetTable(matrix) {
@@ -276,7 +384,7 @@ export function mapSheetTable(matrix) {
   const indexed = indexHeaders(matrix[0]);
   const leads = [];
   for (let rowIndex = 1; rowIndex < matrix.length; rowIndex += 1) {
-    const lead = mapRow(indexed, matrix[rowIndex] || []);
+    const lead = mapRow(indexed, matrix[rowIndex] || [], rowIndex + 1);
     if (lead) leads.push(lead);
   }
   return leads;

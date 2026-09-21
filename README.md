@@ -1,12 +1,12 @@
 # GoSmile Leads
 
-PWA local de CRM de leads para **https://leads.evob.org**, look **GoSmile V2-pt** (o mesmo de gosmile.evob.org /v2 /recepcao /implantes), a correr sozinha num **Mac Mini**.
+PWA de CRM para **https://leads.evob.org**, look **GoSmile V2-pt**, a correr no **Mac Mini** (Node na porta **3040**).
 
-Não usa APIs pagas: sem Gemini, sem Google Apps Script, sem Firebase, sem Service Account e sem n8n. As leads do formulário Meta entram por CSV público da aba **Inbound META** para `./data/leads.json`. O frontend só fala com `/api` no mesmo origin.
+A fonte de verdade é a Google Sheet `1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`, aba **Inbound META**, via Apps Script grátis (`/exec`). Não há projecto Google Cloud, conta de serviço nem billing. A aba «Leads (2024 - 2026)» não é lida nem escrita. O histórico que estava em `data/leads.json` deixa de contar: no arranque o ficheiro fica `[]` e não volta a ser carregado.
 
-Folha: `1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`, aba por nome `Inbound META`. O dono (daniel@constantcircle.co) tem de manter a partilha por link com permissão de ver — não há conta de serviço nem billing. `POST /api/sync/inbound-meta` corre ao abrir a app.
+O browser só fala com `/api` no mesmo origin. O segredo do Apps Script fica no Mini (`APPS_SCRIPT_SECRET`) e não entra no frontend.
 
-PIN de acesso: **2000** (sessionStorage `gosmile-leads-unlocked`). O ecrã de PIN é HTML/CSS/JS clássico (G 144px + 4 caixas + Entrar), para o iPhone não ficar ecrã branco.
+PIN de acesso: **2000** (sessionStorage `gosmile-leads-unlocked`).
 
 ## Arranque local
 
@@ -14,35 +14,38 @@ PIN de acesso: **2000** (sessionStorage `gosmile-leads-unlocked`). O ecrã de PI
 
 ```bash
 npm install
+cp .env.example .env   # APPS_SCRIPT_URL e APPS_SCRIPT_SECRET
 npm run dev
 ```
 
-- UI (Vite): http://localhost:3000  
-- API (Express): http://127.0.0.1:3040/api  
+- UI (Vite): http://localhost:3000
+- API (Express): http://127.0.0.1:3040/api
 - O Vite faz proxy de `/api` para a porta 3040.
+
+Sem as duas variáveis, `GET /api/leads` devolve `[]` (não lê JSON antigo).
 
 ## Produção (Mac Mini)
 
 ```bash
 npm install
 npm run build
-PORT=3040 npm start
+PORT=3040 APPS_SCRIPT_URL='https://script.google.com/macros/s/…/exec' APPS_SCRIPT_SECRET='…' npm start
 ```
 
-O servidor Express serve `dist/` e `/api` na mesma porta. Ver [DEPLOY.md](./DEPLOY.md) para launchd, **Cloudflare Tunnel** (`leads.evob.org`) e Caddy.
+O servidor Express serve `dist/` e `/api` na mesma porta. Ver [DEPLOY.md](./DEPLOY.md) e [backend-gas/README.md](./backend-gas/README.md) para ligar o script à folha, publicar o `/exec` e pôr as variáveis no launchd.
 
 ## API
 
 | Método | Caminho | Descrição |
 | --- | --- | --- |
-| GET | `/api/health` | Estado do serviço |
-| GET | `/api/leads` | Lista leads |
-| POST | `/api/sync/inbound-meta` | Importa a aba Inbound META (CSV público) para `data/leads.json` |
-| POST | `/api/leads` | Cria lead (`name` obrigatório) |
-| GET | `/api/leads/:id` | Lê uma lead |
-| PATCH / PUT | `/api/leads/:id` | Actualiza lead (também aceita campos PT: Nome, Telefone, …) |
-| DELETE | `/api/leads/:id` | Apaga lead |
+| GET | `/api/health` | Estado. `storage` é `apps-script`; `configured` diz se o Mini tem URL e segredo |
+| GET | `/api/leads` | Leads da aba Inbound META (proxy server-side) |
+| POST | `/api/sync/inbound-meta` | Já não importa CSV nem JSON. Devolve a contagem actual da folha |
+| POST | `/api/leads` | Acrescenta uma linha (nome, telefone, email, notas) |
+| GET | `/api/leads/:id` | Lê uma lead (`id` = número da linha) |
+| PATCH / PUT | `/api/leads/:id` | Grava CRM na mesma linha (observações, contactos, consultas, médico, valor, pagamento) |
+| DELETE | `/api/leads/:id` | Recusado (405). As linhas da folha não se apagam por aqui |
 | GET / PUT | `/api/settings` | Comissão local |
-| GET / POST | `/api/reminders` | Lembretes só em disco (sem email) |
+| GET / POST | `/api/reminders` | Lembretes só em disco |
 
-Ficheiros: `data/leads.json`, `data/settings.json`, `data/reminders.json`. Se `leads.json` não existir, o servidor copia `data/seed-leads.json`.
+`data/settings.json` e `data/reminders.json` continuam locais. `data/leads.json` e `data/seed-leads.json` são um stub `[]`.
