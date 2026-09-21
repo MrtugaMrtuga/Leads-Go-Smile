@@ -4,7 +4,7 @@
  */
 
 import { leadFromSheetRow, mapDataToLeads } from '../shared/inboundMeta.js';
-import { leadPatchToFields } from '../shared/sheetWrite.js';
+import { leadPatchToFields, PipelineError } from '../shared/sheetWrite.js';
 
 const PLACEHOLDER = /replace_with|changeme|your[-_ ]?secret/i;
 
@@ -141,8 +141,14 @@ export async function getInboundLead(id, options = {}) {
 export async function updateInboundLead(id, updates, options = {}) {
   const cfg = appsScriptConfig(options.env);
   if (!cfg.configured) throw new SheetError('Apps Script não configurado', 503);
-  const patch = leadPatchToFields(updates, options.now);
-  if (!patch.fields.length && !patch.noteSet && !patch.status) {
+  let patch;
+  try {
+    patch = leadPatchToFields(updates, options.now);
+  } catch (error) {
+    if (error instanceof PipelineError) throw new SheetError(error.message, 400);
+    throw error;
+  }
+  if (!patch.fields.length && !patch.noteSet && !patch.status && !patch.motivoSet && !patch.fechoSet) {
     throw new SheetError('Nada para actualizar', 400);
   }
   const payload = await gasRequest({
@@ -153,6 +159,11 @@ export async function updateInboundLead(id, updates, options = {}) {
       status: patch.status,
       note: patch.note,
       noteSet: patch.noteSet,
+      motivo: patch.motivo,
+      motivoSet: patch.motivoSet,
+      fecho: patch.fecho,
+      fechoSet: patch.fechoSet,
+      fechoClear: patch.fechoClear,
       fields: patch.fields,
     },
     ...options,

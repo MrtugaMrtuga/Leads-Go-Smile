@@ -22,6 +22,7 @@ const isProd = process.env.NODE_ENV === 'production';
 const ALLOWED_STATUSES = new Set([
   'new',
   'contacted',
+  'processing',
   'discarded',
   'scheduled',
   'positive',
@@ -34,7 +35,14 @@ const ESTADO_TO_STATUS = {
   fechado: 'completed',
   'não interessada': 'discarded',
   'nao interessada': 'discarded',
+  descartada: 'discarded',
+  descartado: 'discarded',
   faltou: 'contacted',
+  'em processamento': 'processing',
+  'não atendeu': 'processing',
+  'nao atendeu': 'processing',
+  marcada: 'scheduled',
+  marcado: 'scheduled',
 };
 
 function normalizeBody(body = {}) {
@@ -110,6 +118,8 @@ function sanitizeLeadInput(raw = {}) {
   if (body.externalId !== undefined) out.externalId = String(body.externalId);
   if (body.crm && typeof body.crm === 'object' && !Array.isArray(body.crm)) out.crm = body.crm;
   if (body.fields && typeof body.fields === 'object') out.fields = body.fields;
+  if (body.motivo !== undefined) out.motivo = String(body.motivo);
+  else if (body.discardReason !== undefined) out.motivo = String(body.discardReason);
   return out;
 }
 

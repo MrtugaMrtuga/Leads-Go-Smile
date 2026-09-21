@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import LeadName from '../components/LeadName';
 import { Lead } from '../types';
 import { formatCurrency } from '../utils';
 
@@ -91,7 +92,7 @@ const Admin: React.FC<AdminProps> = ({
             </div>
           </div>
           <button type="button" className="cta sec" onClick={onOpenTrash}>
-            Ver lixo
+            Ver descartadas
           </button>
           <button type="button" className="cta sec" onClick={onOpenAccounts}>
             Ver contas
@@ -106,7 +107,7 @@ const Admin: React.FC<AdminProps> = ({
               {completedLeads.map((lead) => (
                 <div key={lead.id} className="row">
                   <span className="row-main">
-                    <span className="row-title">{lead.name}</span>
+                    <LeadName lead={lead} className="row-title" />
                     <span className="row-sub">Pendente · {formatCurrency((lead.value || 0) * (settings.commissionPercent / 100))}</span>
                   </span>
                   <button type="button" onClick={() => onUpdateStatus(lead.id, { status: 'paid' }, { status: 'paid', estado: 'PAGO' })}>
@@ -117,7 +118,7 @@ const Admin: React.FC<AdminProps> = ({
               {paidLeads.map((lead) => (
                 <div key={lead.id} className="row">
                   <span className="row-main">
-                    <span className="row-title">{lead.name}</span>
+                    <LeadName lead={lead} className="row-title" />
                     <span className="row-sub">Recebido · {formatCurrency((lead.value || 0) * (settings.commissionPercent / 100))}</span>
                   </span>
                 </div>

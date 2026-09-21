@@ -1,4 +1,5 @@
 import React from 'react';
+import LeadName from '../components/LeadName';
 import { Lead } from '../types';
 import { formatCurrency } from '../utils';
 
@@ -20,7 +21,7 @@ const Accounts: React.FC<AccountsProps> = ({ leads, onUpdateStatus, monthLabel, 
           {leads.map((lead) => (
             <div key={lead.id} className="row">
               <span className="row-main">
-                <span className="row-title">{lead.name}</span>
+                    <LeadName lead={lead} className="row-title" />
                 <span className="row-sub">{lead.status === 'paid' ? 'Pago' : 'Pendente'} · {formatCurrency(lead.value || 0)}</span>
               </span>
               {lead.status !== 'paid' && (

@@ -207,6 +207,71 @@ test('marking paid writes Pagamento and keeps the existing note', async () => {
   assert.equal(posted.fields.find((field) => field.header === 'Pagamento').value, 'Pago');
 });
 
+test('não atendeu posts processing and Legenda without leaving a secret', async () => {
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  let posted = null;
+  const app = createApp();
+  const values = [...IDA_VALUES];
+  values[5] = '[status:processing]';
+  await withFetch(async (_url, init) => {
+    if (init.method === 'POST') posted = JSON.parse(init.body);
+    return new Response(JSON.stringify({ ok: true, headers: HEADERS, row: { row: 2, values } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }, async () => {
+    const response = await call(app, 'PATCH', '/api/leads/2', { status: 'processing', isContacted: true });
+    assert.equal(response.status, 200);
+    assert.equal(response.json.status, 'processing');
+    assert.equal(response.text.includes(SECRET), false);
+  });
+  assert.equal(posted.status, 'processing');
+  assert.equal(posted.fields.find((field) => field.header === 'Legenda').value, 'Em processamento');
+  assert.equal(posted.fields.find((field) => field.header === '1º Contacto').ifBlank, true);
+});
+
+test('discard without motivo is rejected before the sheet write', async () => {
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  let called = false;
+  const app = createApp();
+  await withFetch(async () => {
+    called = true;
+    return new Response(JSON.stringify({ ok: true }), { status: 200, headers: { 'content-type': 'application/json' } });
+  }, async () => {
+    const response = await call(app, 'PATCH', '/api/leads/2', { status: 'discarded', notes: '   ' });
+    assert.equal(response.status, 400);
+    assert.match(response.json.error, /Motivo/);
+  });
+  assert.equal(called, false);
+});
+
+test('discard with motivo is posted to Legenda and Observações', async () => {
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  let posted = null;
+  const app = createApp();
+  const values = [...IDA_VALUES];
+  values[5] = '[status:discarded]\n[motivo:não interessa]';
+  await withFetch(async (_url, init) => {
+    if (init.method === 'POST') posted = JSON.parse(init.body);
+    return new Response(JSON.stringify({ ok: true, headers: HEADERS, row: { row: 2, values } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }, async () => {
+    const response = await call(app, 'PATCH', '/api/leads/2', { status: 'discarded', motivo: 'não interessa' });
+    assert.equal(response.status, 200);
+    assert.equal(response.json.status, 'discarded');
+    assert.equal(response.json.discardReason, 'não interessa');
+    assert.equal(response.json.formFields.some((field) => String(field.value).includes('[motivo:')), false);
+  });
+  assert.equal(posted.motivo, 'não interessa');
+  assert.equal(posted.motivoSet, true);
+  assert.equal(posted.fields.find((field) => field.header === 'Legenda').value, 'Descartada');
+});
+
 test('sheet rows are not deleted through the API', async () => {
   const app = createApp();
   const response = await call(app, 'DELETE', '/api/leads/2');

@@ -9,6 +9,9 @@
   --wood: #e0c8a8;
   --accent: #e0c8a8;
   --alert: #000000;
+  --dot-yellow: #e0b000;
+  --dot-green: #1f8a4c;
+  --dot-red: #c62828;
   --font: "Poppins", system-ui, sans-serif;
 }
 
@@ -369,10 +372,41 @@ h1.page-title {
 }
 
 .row-title {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-size: 16px;
   font-weight: 500;
   color: #000;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex: 0 0 8px;
+}
+
+.status-dot.yellow {
+  background: var(--dot-yellow);
+}
+
+.status-dot.green {
+  background: var(--dot-green);
+}
+
+.status-dot.red {
+  background: var(--dot-red);
+}
+
+.lead-name-text {
+  min-width: 0;
+}
+
+.name-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .row-sub {
@@ -389,6 +423,22 @@ h1.page-title {
   font-weight: 400;
   color: #000;
   white-space: nowrap;
+}
+
+.stat-figures {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.stat-pct {
+  min-width: 52px;
+  text-align: right;
+  color: var(--mute);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
 }
 
 .row-status {
@@ -430,6 +480,9 @@ h1.page-title {
 }
 
 .day-line-act {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   color: #000;
   font-size: 15px;
   font-weight: 500;

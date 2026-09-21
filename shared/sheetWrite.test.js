@@ -21,6 +21,7 @@ test('patch maps notes and status onto existing CRM columns only', () => {
   const contact = patch.fields.find((field) => field.header === '1º Contacto');
   assert.equal(contact.ifBlank, true);
   assert.equal(contact.value, NOW.toISOString());
+  assert.equal(patch.fields.find((field) => field.header === 'Legenda').value, 'Em processamento');
 });
 
 test('status without a new note does not replace Observações', () => {
@@ -28,6 +29,7 @@ test('status without a new note does not replace Observações', () => {
   assert.equal(patch.noteSet, false);
   assert.equal(patch.status, 'paid');
   assert.equal(patch.fields.find((field) => field.header === 'Pagamento').value, 'Pago');
+  assert.equal(patch.fields.some((field) => field.header === 'Legenda'), false);
 });
 
 test('unknown and meta columns are dropped; explicit CRM keys pass', () => {
@@ -52,5 +54,56 @@ test('merge keeps the previous note when the UI only changes status', () => {
       noteSet: false,
     }),
     '[status:paid]\nconsulta marcada'
+  );
+});
+
+test('não atendeu marks processing, stamps first contact, and writes Legenda', () => {
+  const patch = leadPatchToFields({ status: 'processing', isContacted: true }, NOW);
+  assert.equal(patch.status, 'processing');
+  assert.equal(patch.noteSet, false);
+  assert.equal(patch.fields.find((field) => field.header === 'Legenda').value, 'Em processamento');
+  assert.equal(patch.fields.find((field) => field.header === '1º Contacto').ifBlank, true);
+  assert.equal(patch.fechoClear, true);
+  assert.equal(patch.fields.find((field) => field.header === 'Data fecho').value, '');
+});
+
+test('booking writes Legenda Marcada', () => {
+  const patch = leadPatchToFields({ status: 'scheduled', appointmentDate: '2026-09-22T10:00' }, NOW);
+  assert.equal(patch.fields.find((field) => field.header === 'Legenda').value, 'Marcada');
+  assert.equal(patch.fields.find((field) => field.header === 'Data Primeira Consulta').value, '2026-09-22T10:00');
+  const fecho = patch.fields.find((field) => field.header === 'Data fecho');
+  assert.equal(fecho.value, NOW.toISOString());
+  assert.equal(fecho.ifBlank, true);
+  assert.equal(patch.fecho, NOW.toISOString());
+});
+
+test('discard requires a motivo and stores it beside Legenda', () => {
+  assert.throws(() => leadPatchToFields({ status: 'discarded', notes: '   ' }, NOW), /Motivo é obrigatório/);
+  const patch = leadPatchToFields({ status: 'discarded', motivo: 'não interessa' }, NOW);
+  assert.equal(patch.status, 'discarded');
+  assert.equal(patch.motivo, 'não interessa');
+  assert.equal(patch.motivoSet, true);
+  assert.equal(patch.noteSet, false);
+  assert.equal(patch.fields.find((field) => field.header === 'Legenda').value, 'Descartada');
+  assert.equal(patch.fields.find((field) => field.header === 'Data fecho').ifBlank, true);
+  assert.equal(
+    mergeObservacoes('[status:contacted]\nliguei ontem', {
+      status: 'discarded',
+      note: patch.note,
+      noteSet: patch.noteSet,
+      motivo: patch.motivo,
+      motivoSet: patch.motivoSet,
+      fecho: patch.fecho,
+      fechoSet: patch.fechoSet,
+    }),
+    `[status:discarded]\n[motivo:não interessa]\n[fecho:${NOW.toISOString()}]\nliguei ontem`
+  );
+  assert.equal(
+    mergeObservacoes(`[status:discarded]\n[motivo:não interessa]\n[fecho:${NOW.toISOString()}]\nliguei ontem`, {
+      status: 'scheduled',
+      fecho: '2026-09-22T10:00:00.000Z',
+      fechoSet: true,
+    }),
+    `[status:scheduled]\n[motivo:não interessa]\n[fecho:${NOW.toISOString()}]\nliguei ontem`
   );
 });

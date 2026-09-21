@@ -39,6 +39,7 @@ export const COLUMN_DEFS = [
   { key: 'messenger', header: 'Messenger', channel: true },
   { key: 'website', header: 'Website', channel: true },
   { key: 'observacoes_final', header: 'Observações', occurrence: 2 },
+  { key: 'data_fecho', header: 'Data fecho' },
 ];
 
 const CHANNELS = [
@@ -73,33 +74,254 @@ export const CRM_KEYS = [
   'messenger',
   'website',
   'observacoes_final',
+  'data_fecho',
 ];
 
-const LEAD_STATUSES = ['new', 'contacted', 'discarded', 'scheduled', 'positive', 'completed', 'paid'];
-const STATUS_NOTE = /^\[status:(new|contacted|discarded|scheduled|positive|completed|paid)\]\s*/i;
+const LEAD_STATUSES = ['new', 'contacted', 'processing', 'discarded', 'scheduled', 'positive', 'completed', 'paid'];
+const STATUS_NOTE = /^\[status:(new|contacted|processing|discarded|scheduled|positive|completed|paid)\]\s*/i;
+const MOTIVO_NOTE = /^\[motivo:([^\]]*)\]\s*/i;
+const FECHO_NOTE = /^\[fecho:([^\]]*)\]\s*/i;
+
+const OTHER_STATUS_LABELS = {
+  new: 'Novas',
+  positive: 'Positivas',
+  completed: 'Concluídas',
+  paid: 'Pagas',
+};
+
+export function cleanMotivo(value) {
+  return String(value ?? '')
+    .replace(/[\r\n\]]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+export function cleanFecho(value) {
+  const text = String(value ?? '').replace(/[\r\n\]]/g, '').trim();
+  if (!/^\d{4}-\d{2}-\d{2}/.test(text)) return '';
+  return text;
+}
 
 export function splitStatusNote(value) {
-  const text = String(value ?? '').replace(/^\uFEFF/, '').trim();
-  const match = text.match(STATUS_NOTE);
-  if (!match) return { status: '', note: text };
+  let text = String(value ?? '').replace(/^\uFEFF/, '').trim();
+  let status = '';
+  let motivo = '';
+  let fecho = '';
+  for (let guard = 0; guard < 8; guard += 1) {
+    const statusMatch = text.match(STATUS_NOTE);
+    if (statusMatch) {
+      status = statusMatch[1].toLowerCase();
+      text = text.slice(statusMatch[0].length).trim();
+      continue;
+    }
+    const motivoMatch = text.match(MOTIVO_NOTE);
+    if (motivoMatch) {
+      motivo = cleanMotivo(motivoMatch[1]);
+      text = text.slice(motivoMatch[0].length).trim();
+      continue;
+    }
+    const fechoMatch = text.match(FECHO_NOTE);
+    if (fechoMatch) {
+      fecho = cleanFecho(fechoMatch[1]);
+      text = text.slice(fechoMatch[0].length).trim();
+      continue;
+    }
+    break;
+  }
+  return { status, motivo, fecho, note: text };
+}
+
+export function formatStatusNote(note, status, motivo, fecho) {
+  const parsed = splitStatusNote(note);
+  const clean = parsed.note;
+  const normalized = String(status || '').trim().toLowerCase();
+  const reason = cleanMotivo(motivo === undefined ? parsed.motivo : motivo);
+  const closed = fecho === undefined ? parsed.fecho : cleanFecho(fecho);
+  const lines = [];
+  if (LEAD_STATUSES.includes(normalized)) lines.push(`[status:${normalized}]`);
+  if (reason) lines.push(`[motivo:${reason}]`);
+  if (closed) lines.push(`[fecho:${closed}]`);
+  if (!lines.length) return clean;
+  return clean ? `${lines.join('\n')}\n${clean}` : lines.join('\n');
+}
+
+export function mergeObservacoes(
+  currentCell,
+  { status = '', note = '', noteSet = false, motivo = '', motivoSet = false, fecho = '', fechoSet = false, fechoClear = false } = {}
+) {
+  const parsed = splitStatusNote(currentCell);
+  const incoming = splitStatusNote(note);
+  const nextNote = noteSet ? incoming.note : parsed.note;
+  const nextStatus = status || parsed.status;
+  const nextMotivo = motivoSet ? cleanMotivo(motivo || incoming.motivo) : incoming.motivo || parsed.motivo;
+  let nextFecho = parsed.fecho || incoming.fecho || '';
+  if (fechoClear) nextFecho = '';
+  else if (fechoSet) nextFecho = parsed.fecho || cleanFecho(fecho);
+  return formatStatusNote(nextNote, nextStatus, nextMotivo, nextFecho);
+}
+
+/** Legenda values the UI filters on. Empty means a new lead with no pipeline colour. */
+export function statusFromLegenda(value) {
+  const folded = foldHeader(value);
+  if (folded === 'em processamento') return 'processing';
+  if (folded === 'marcada' || folded === 'marcado') return 'scheduled';
+  if (folded === 'descartada' || folded === 'descartado') return 'discarded';
+  return '';
+}
+
+export function legendaForStatus(status) {
+  if (status === 'processing' || status === 'contacted') return 'Em processamento';
+  if (status === 'scheduled') return 'Marcada';
+  if (status === 'discarded') return 'Descartada';
+  if (status === 'new') return '';
+  return null;
+}
+
+export function listBucket(status) {
+  if (status === 'scheduled') return 'marcadas';
+  if (status === 'discarded') return 'descartadas';
+  if (status === 'new' || status === 'contacted' || status === 'processing') return 'inbox';
+  return 'other';
+}
+
+export function pipelineTone(status) {
+  if (status === 'discarded') return 'red';
+  if (status === 'scheduled') return 'green';
+  if (status === 'processing' || status === 'contacted') return 'yellow';
+  return '';
+}
+
+function pctOf(count, total) {
+  return total ? Math.round((count / total) * 1000) / 10 : 0;
+}
+
+export function pipelineBreakdown(leads) {
+  const list = Array.isArray(leads) ? leads : [];
+  const total = list.length;
+  const countStatus = (status) => list.filter((lead) => lead?.status === status).length;
+  const discarded = countStatus('discarded');
+  const booked = countStatus('scheduled');
+  const processing = list.filter((lead) => lead?.status === 'processing' || lead?.status === 'contacted').length;
+  const covered = new Set(['discarded', 'scheduled', 'processing', 'contacted']);
+  const present = [];
+  list.forEach((lead) => {
+    const status = String(lead?.status || '');
+    if (!status || covered.has(status) || present.includes(status)) return;
+    present.push(status);
+  });
+  const preferred = ['new', 'positive', 'completed', 'paid'];
+  const extras = [];
+  preferred.forEach((status) => {
+    const count = countStatus(status);
+    if (!count) return;
+    extras.push({ key: status, label: OTHER_STATUS_LABELS[status] || status, count, pct: pctOf(count, total) });
+  });
+  present.forEach((status) => {
+    if (preferred.includes(status)) return;
+    const count = countStatus(status);
+    if (!count) return;
+    extras.push({ key: status, label: OTHER_STATUS_LABELS[status] || status, count, pct: pctOf(count, total) });
+  });
   return {
-    status: match[1].toLowerCase(),
-    note: text.slice(match[0].length).trim(),
+    total,
+    buckets: [
+      { key: 'total', label: 'Total', count: total, pct: total ? 100 : 0 },
+      { key: 'discarded', label: 'Descartadas', count: discarded, pct: pctOf(discarded, total) },
+      { key: 'booked', label: 'Marcadas', count: booked, pct: pctOf(booked, total) },
+      { key: 'processing', label: 'Em processamento', count: processing, pct: pctOf(processing, total) },
+      ...extras,
+    ],
   };
 }
 
-export function formatStatusNote(note, status) {
-  const clean = splitStatusNote(note).note;
-  const normalized = String(status || '').trim().toLowerCase();
-  if (!LEAD_STATUSES.includes(normalized)) return clean;
-  return clean ? `[status:${normalized}]\n${clean}` : `[status:${normalized}]`;
+export function pipelineStats(leads) {
+  const breakdown = pipelineBreakdown(leads);
+  const bucket = (key) => breakdown.buckets.find((row) => row.key === key) || { count: 0, pct: 0 };
+  return {
+    total: breakdown.total,
+    discarded: bucket('discarded').count,
+    booked: bucket('booked').count,
+    processing: bucket('processing').count,
+    discardedPct: bucket('discarded').pct,
+    bookedPct: bucket('booked').pct,
+    processingPct: bucket('processing').pct,
+    buckets: breakdown.buckets,
+  };
 }
 
-export function mergeObservacoes(currentCell, { status = '', note = '', noteSet = false } = {}) {
-  const parsed = splitStatusNote(currentCell);
-  const nextNote = noteSet ? splitStatusNote(note).note : parsed.note;
-  const nextStatus = status || parsed.status;
-  return formatStatusNote(nextNote, nextStatus);
+export function lisbonDayKey(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  return new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Lisbon',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date);
+}
+
+function dayLabel(ymd) {
+  const [year, month, day] = ymd.split('-');
+  return `${day}/${month}/${year}`;
+}
+
+function shiftDay(ymd, days) {
+  const [year, month, day] = ymd.split('-').map(Number);
+  const utc = new Date(Date.UTC(year, month - 1, day + days));
+  return utc.toISOString().slice(0, 10);
+}
+
+function weekStartKey(ymd) {
+  const [year, month, day] = ymd.split('-').map(Number);
+  const utc = new Date(Date.UTC(year, month - 1, day));
+  const weekday = utc.getUTCDay();
+  const delta = weekday === 0 ? -6 : 1 - weekday;
+  return shiftDay(ymd, delta);
+}
+
+function contactDay(lead) {
+  return lisbonDayKey(lead?.timestamp || lead?.dataContacto);
+}
+
+function fechoDay(lead) {
+  if (lead?.status !== 'scheduled' && lead?.status !== 'discarded') return '';
+  return lisbonDayKey(lead?.closedAt) || contactDay(lead);
+}
+
+export function closeEvolution(leads, grain = 'day') {
+  const list = Array.isArray(leads) ? leads : [];
+  const weekly = grain === 'week';
+  const limit = weekly ? 12 : 21;
+  const rows = new Map();
+
+  const ensure = (day) => {
+    if (!day) return null;
+    const key = weekly ? weekStartKey(day) : day;
+    if (!rows.has(key)) {
+      const label = weekly ? `${dayLabel(key)} a ${dayLabel(shiftDay(key, 6))}` : dayLabel(key);
+      rows.set(key, { key, label, entradas: 0, positivo: 0, totalFecho: 0 });
+    }
+    return rows.get(key);
+  };
+
+  list.forEach((lead) => {
+    const entrada = ensure(contactDay(lead));
+    if (entrada) entrada.entradas += 1;
+    const fecho = ensure(fechoDay(lead));
+    if (!fecho) return;
+    if (lead.status === 'scheduled') fecho.positivo += 1;
+    if (lead.status === 'scheduled' || lead.status === 'discarded') fecho.totalFecho += 1;
+  });
+
+  return [...rows.values()]
+    .filter((row) => row.entradas || row.positivo || row.totalFecho)
+    .sort((a, b) => (a.key < b.key ? 1 : a.key > b.key ? -1 : 0))
+    .slice(0, limit)
+    .map((row) => ({
+      ...row,
+      positivoPct: row.entradas ? Math.round((row.positivo / row.entradas) * 1000) / 10 : null,
+      totalPct: row.entradas ? Math.round((row.totalFecho / row.entradas) * 1000) / 10 : null,
+    }));
 }
 
 const MARKS = new Set(['x', 'sim', 'yes', '1', 'true', '✓', '✔', '✅']);
@@ -276,6 +498,9 @@ function inferInboundStatus(raw) {
   const primary = splitStatusNote(raw.observacoes);
   if (LEAD_STATUSES.includes(primary.status)) return primary.status;
 
+  const fromLegenda = statusFromLegenda(raw.legenda);
+  if (fromLegenda) return fromLegenda;
+
   const pagamento = foldHeader(raw.pagamento);
   if (pagamento === 'pago' || pagamento === 'paga' || pagamento === 'paid') return 'paid';
 
@@ -293,11 +518,17 @@ function inferInboundStatus(raw) {
   const appointment = String(raw.data_primeira_consulta || '').trim();
   if (appointment.length > 2 || notes.includes('marcado') || notes.includes('marcada')) return 'scheduled';
   if (
-    notes.includes('engano') ||
-    notes.includes('não interessa') ||
-    notes.includes('nao interessa') ||
+    notes.includes('não atendeu') ||
+    notes.includes('nao atendeu') ||
     notes.includes('não atende') ||
     notes.includes('nao atende')
+  ) {
+    return 'processing';
+  }
+  if (
+    notes.includes('engano') ||
+    notes.includes('não interessa') ||
+    notes.includes('nao interessa')
   ) {
     return 'discarded';
   }
@@ -346,6 +577,8 @@ function mapRow(indexed, cells, sheetRow) {
   CRM_KEYS.forEach((key) => {
     crm[key] = key === 'observacoes' ? primary.note : raw[key] || '';
   });
+  const discardReason = primary.motivo || '';
+  const closedAt = String(raw.data_fecho || primary.fecho || '').trim();
 
   const externalId = metaExternalId(raw.telefone, raw.email, timestamp);
   const id = sheetRow ? String(sheetRow) : externalId;
@@ -363,6 +596,8 @@ function mapRow(indexed, cells, sheetRow) {
     timestamp,
     status,
     isContacted: status !== 'new',
+    discardReason,
+    closedAt,
     notes,
     doctor: raw.medico_orcamento || '',
     appointmentDate: raw.data_primeira_consulta || '',
@@ -415,6 +650,8 @@ function normalizeStoredLead(item, index) {
     timestamp: item.timestamp || item.Data || new Date().toISOString(),
     status: item.status || 'new',
     isContacted: Boolean(item.isContacted),
+    discardReason: item.discardReason ? String(item.discardReason) : '',
+    closedAt: item.closedAt ? String(item.closedAt) : '',
     source: item.source || item.Origem || '',
     sourceTab: item.sourceTab || '',
   };
