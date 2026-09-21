@@ -43,3 +43,9 @@ O servidor Express serve `dist/` e `/api` na mesma porta. Ver [DEPLOY.md](./DEPL
 | GET / POST | `/api/reminders` | Lembretes só em disco (sem email) |
 
 Ficheiros: `data/leads.json`, `data/settings.json`, `data/reminders.json`. Se `leads.json` não existir, o servidor copia `data/seed-leads.json`.
+
+## Inbound META
+
+O detalhe da lead lista cada resposta preenchida do formulário Meta. O mapa coluna → etiqueta está em `shared/inboundMeta.js` (`mapDataToLeads`). `substituir_dentes_em_falta` aparece como `Substituir dentes em falta`. Células vazias não aparecem.
+
+Este fork não tem `backend-gas/`. A leitura da Sheet fica no Apps Script de **Evobtob/Leads-Go-Smile**. O patch (sheet `1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`, aba `Inbound META`, sem `getSheets()[0]`) está em [docs/evobtob-gas-inbound-meta.md](./docs/evobtob-gas-inbound-meta.md). Sem service account e sem faturação Google Cloud.

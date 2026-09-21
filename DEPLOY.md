@@ -32,7 +32,7 @@ curl -s http://127.0.0.1:3040/api/health
 # {"ok":true,"app":"GoSmile Leads","host":"leads.evob.org","storage":"local-json"}
 ```
 
-A UI e a API partilham a mesma origem. Não configure webhooks, Gemini, Apps Script nem Firebase.
+A UI e a API partilham a mesma origem. Não configure webhooks, Gemini, Firebase nem um segundo cliente da Sheet. A aba Inbound META lê-se no Apps Script do repo Evobtob; ver [docs/evobtob-gas-inbound-meta.md](./docs/evobtob-gas-inbound-meta.md).
 
 ## 4. launchd (sobe no login)
 

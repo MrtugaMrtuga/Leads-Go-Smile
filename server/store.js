@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-export const DATA_DIR = join(__dirname, '..', 'data');
+export const DATA_DIR = process.env.DATA_DIR || join(__dirname, '..', 'data');
 
 const FILES = {
   leads: join(DATA_DIR, 'leads.json'),
@@ -15,10 +15,14 @@ const DEFAULT_SETTINGS = {
   commissionPercent: 3,
 };
 
-const writeQueue = Promise.resolve();
+let writeQueue = Promise.resolve();
 
 function enqueue(task) {
   const next = writeQueue.then(task, task);
+  writeQueue = next.then(
+    () => {},
+    () => {}
+  );
   return next;
 }
 
@@ -67,18 +71,25 @@ export async function getLead(id) {
   return leads.find((lead) => String(lead.id) === String(id)) || null;
 }
 
-function nextId(leads) {
+export function nextLeadId(leads) {
   const nums = leads
     .map((lead) => Number.parseInt(String(lead.id), 10))
     .filter((n) => Number.isFinite(n));
   return String((nums.length ? Math.max(...nums) : 1000) + 1);
 }
 
+export async function writeLeads(leads) {
+  return enqueue(async () => {
+    await writeJson(FILES.leads, leads);
+    return leads;
+  });
+}
+
 export async function createLead(input) {
   return enqueue(async () => {
     const leads = await listLeads();
     const now = new Date().toISOString();
-    const id = nextId(leads);
+    const id = nextLeadId(leads);
     const lead = {
       id,
       externalId: id,
@@ -94,6 +105,12 @@ export async function createLead(input) {
       value: Number(input.value) || 0,
       source: input.source || 'Manual',
     };
+    if (input.meta && typeof input.meta === 'object' && Object.keys(input.meta).length) {
+      lead.meta = input.meta;
+    }
+    if (Array.isArray(input.metaExtras) && input.metaExtras.length) {
+      lead.metaExtras = input.metaExtras;
+    }
     leads.unshift(lead);
     await writeJson(FILES.leads, leads);
     return lead;

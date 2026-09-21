@@ -9,6 +9,7 @@ import Admin from './views/Admin';
 import { AppView, Lead, AdminSettings, LeadUpdatePayload } from './types';
 import { formatMonthYear, getLeadsByMonth } from './utils';
 import { createLead, fetchLeads, fetchSettings, saveSettings, sendReminder, updateLead } from './api';
+import { mapDataToLeads } from './shared/inboundMeta.js';
 
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<AppView>('inbox');
@@ -24,7 +25,7 @@ const App: React.FC = () => {
     setFetchError(null);
     try {
       const [nextLeads, nextSettings] = await Promise.all([fetchLeads(), fetchSettings()]);
-      setLeads(nextLeads);
+      setLeads(mapDataToLeads(nextLeads));
       setSettings(nextSettings);
     } catch (error) {
       console.error(error);
