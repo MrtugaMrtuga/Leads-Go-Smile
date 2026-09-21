@@ -2,7 +2,7 @@ import express from 'express';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SHEET_TAB } from '../shared/inboundMeta.js';
+import { buildLeadStats, SHEET_ID, SHEET_TAB } from '../shared/inboundMeta.js';
 import {
   appsScriptConfig,
   createInboundLead,
@@ -139,9 +139,19 @@ export function createApiRouter() {
       app: 'GoSmile Leads',
       host: 'leads.evob.org',
       storage: 'apps-script',
+      sheetId: SHEET_ID,
       sheetTab: SHEET_TAB,
       configured: config.configured,
     });
+  });
+
+  api.get('/stats', async (_req, res) => {
+    try {
+      const { leads } = await listInboundLeads();
+      res.json(buildLeadStats(leads));
+    } catch (error) {
+      sendSheetError(res, error);
+    }
   });
 
   api.get('/leads', async (_req, res) => {

@@ -520,6 +520,7 @@ h1.page-title {
   color: var(--mute);
   font-size: 13px;
   font-weight: 400;
+  white-space: nowrap;
 }
 
 .dock-item.is-on {
@@ -684,4 +685,78 @@ textarea.field:focus {
   font-size: 16px;
   font-weight: 400;
   color: #000;
+}
+
+.chart {
+  margin: 4px 0 8px;
+}
+
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+  margin: 0 0 8px;
+  font-size: 12px;
+  color: var(--mute);
+}
+
+.chart-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart-swatch {
+  width: 14px;
+  height: 6px;
+  background: var(--dot-green);
+}
+
+.chart-swatch.total {
+  background: var(--wood);
+}
+
+.chart-block {
+  padding: 8px 0 6px;
+  border-top: 1px solid var(--line);
+}
+
+.chart .chart-block:last-child {
+  border-bottom: 1px solid var(--line);
+}
+
+.chart-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  color: #000;
+}
+
+.chart-count {
+  color: var(--mute);
+  white-space: nowrap;
+}
+
+.chart-track {
+  height: 6px;
+  margin-top: 4px;
+  border-bottom: 1px solid var(--line);
+}
+
+.chart-bar {
+  display: block;
+  height: 6px;
+  max-width: 100%;
+}
+
+.chart-bar.positivo {
+  background: var(--dot-green);
+}
+
+.chart-bar.total {
+  background: var(--wood);
 }

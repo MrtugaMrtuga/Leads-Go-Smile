@@ -1,4 +1,4 @@
-const CACHE = 'gosmile-leads-v3';
+const CACHE = 'gosmile-leads-v4';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

@@ -1,11 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { fetchStats } from '../api';
 import { Lead } from '../types';
-import { closeEvolution, pipelineBreakdown } from '../utils';
+import { buildLeadStats, ClosePeriod, LeadStats } from '../utils';
 
 interface DashboardProps {
-  leads: Lead[];
   allLeads: Lead[];
-  monthLabel: string;
 }
 
 function formatPct(value: number | null) {
@@ -14,48 +13,90 @@ function formatPct(value: number | null) {
   return `${text}%`;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ leads, allLeads, monthLabel }) => {
-  const total = leads.length;
-  const novos = leads.filter((l) => l.status === 'new').length;
-  const contactos = leads.filter((l) => l.status === 'contacted' || l.status === 'processing').length;
-  const marcados = leads.filter((l) => l.status === 'scheduled').length;
-  const perdidos = leads.filter((l) => l.status === 'discarded').length;
-  const [metric, setMetric] = useState<'novos' | 'contactos' | 'marcados' | 'perdidos'>('novos');
-  const [grain, setGrain] = useState<'day' | 'week'>('day');
-  const stats = pipelineBreakdown(allLeads);
-  const evolution = closeEvolution(allLeads, grain);
+function chartLabel(period: ClosePeriod, grain: 'day' | 'week') {
+  if (grain === 'day') {
+    const [, month, day] = period.key.split('-');
+    return `${day}/${month}`;
+  }
+  return period.label.replace(/\/\d{4}/g, '').replace(' a ', ' – ');
+}
 
-  const byOrigin = leads.reduce<Record<string, number>>((acc, lead) => {
+const CloseChart: React.FC<{ periods: ClosePeriod[]; grain: 'day' | 'week' }> = ({ periods, grain }) => {
+  if (!periods.length) return null;
+  const max = Math.max(1, ...periods.map((period) => Math.max(period.positivo, period.totalFecho)));
+
+  return (
+    <figure className="chart" aria-label="Evolução de fecho positivo e fecho total">
+      <figcaption className="chart-legend">
+        <span className="chart-key">
+          <span className="chart-swatch positivo" />
+          Fecho positivo
+        </span>
+        <span className="chart-key">
+          <span className="chart-swatch total" />
+          Fecho total
+        </span>
+      </figcaption>
+      {periods.map((period) => {
+        const when = chartLabel(period, grain);
+        return (
+          <div
+            key={period.key}
+            className="chart-block"
+            aria-label={`${when}: fecho positivo ${period.positivo}, fecho total ${period.totalFecho}`}
+          >
+            <div className="chart-head">
+              <span>{when}</span>
+              <span className="chart-count">
+                {period.positivo} · {period.totalFecho}
+              </span>
+            </div>
+            <div className="chart-track">
+              <span className="chart-bar positivo" style={{ width: `${(period.positivo / max) * 100}%` }} />
+            </div>
+            <div className="chart-track">
+              <span className="chart-bar total" style={{ width: `${(period.totalFecho / max) * 100}%` }} />
+            </div>
+          </div>
+        );
+      })}
+    </figure>
+  );
+};
+
+const Dashboard: React.FC<DashboardProps> = ({ allLeads }) => {
+  const [grain, setGrain] = useState<'day' | 'week'>('day');
+  const [remote, setRemote] = useState<LeadStats | null>(null);
+  const local = useMemo(() => buildLeadStats(allLeads), [allLeads]);
+
+  useEffect(() => {
+    let cancel = false;
+    setRemote(null);
+    fetchStats()
+      .then((data) => {
+        if (!cancel) setRemote(data);
+      })
+      .catch(() => {
+        /* the same aggregators already ran on the leads in memory */
+      });
+    return () => {
+      cancel = true;
+    };
+  }, [allLeads]);
+
+  const stats = remote ?? local;
+  const evolution = grain === 'week' ? stats.week : stats.day;
+
+  const byOrigin = allLeads.reduce<Record<string, number>>((acc, lead) => {
     const key = lead.source || 'Local';
     acc[key] = (acc[key] || 0) + 1;
     return acc;
   }, {});
 
-  const circles = [
-    { id: 'novos' as const, value: novos, label: 'Novos' },
-    { id: 'contactos' as const, value: contactos, label: 'Contactos' },
-    { id: 'marcados' as const, value: marcados, label: 'Marcados' },
-    { id: 'perdidos' as const, value: perdidos, label: 'Perdidos' },
-  ];
-
   return (
     <div>
-      <p className="hero-num">{total}</p>
-      <p className="hero-foot">leads · {monthLabel.toLowerCase()}</p>
-
-      <div className="circles">
-        {circles.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            className={`circle-btn${metric === item.id ? ' is-on' : ''}`}
-            onClick={() => setMetric(item.id)}
-          >
-            <span className="circle">{item.value}</span>
-            <span className="circle-label">{item.label}</span>
-          </button>
-        ))}
-      </div>
+      <p className="hero-num">{stats.total}</p>
+      <p className="hero-foot">leads · todas</p>
 
       <h2 className="section-label">Estatísticas</h2>
       <p className="sub">Quantidade e percentagem de todas as leads.</p>
@@ -75,7 +116,9 @@ const Dashboard: React.FC<DashboardProps> = ({ leads, allLeads, monthLabel }) =>
 
       <h2 className="section-label">Evolução temporal</h2>
       <p className="sub">Fecho positivo: só marcadas. Fecho total: marcadas + descartadas.</p>
-      <p className="sub">A percentagem é face às entradas do mesmo dia ou semana (Data Contacto). A data do fecho é Data fecho.</p>
+      <p className="sub">
+        A percentagem é face às entradas do mesmo dia ou semana (Data Contacto, Europe/Lisbon). A semana começa à segunda. A data do fecho é Data fecho.
+      </p>
       <div className="filters">
         <button type="button" className={`filter${grain === 'day' ? ' is-on' : ''}`} onClick={() => setGrain('day')}>
           Por dia
@@ -87,46 +130,49 @@ const Dashboard: React.FC<DashboardProps> = ({ leads, allLeads, monthLabel }) =>
       {evolution.length === 0 ? (
         <p className="center-note">Ainda não há datas para a evolução.</p>
       ) : (
-        evolution.map((period) => (
-          <div key={period.key}>
-            <h2 className="section-label">{period.label}</h2>
-            <div className="list">
-              <div className="row">
-                <span className="row-main">
-                  <span className="row-title">Entradas</span>
-                  <span className="row-sub">Data Contacto</span>
-                </span>
-                <span className="row-value">{period.entradas}</span>
-              </div>
-              <div className="row">
-                <span className="row-main">
-                  <span className="row-title">Fecho positivo</span>
-                  <span className="row-sub">Só marcadas</span>
-                </span>
-                <span className="stat-figures">
-                  <span className="row-value">{period.positivo}</span>
-                  <span className="stat-pct">{formatPct(period.positivoPct)}</span>
-                </span>
-              </div>
-              <div className="row">
-                <span className="row-main">
-                  <span className="row-title">Fecho total</span>
-                  <span className="row-sub">Marcadas + descartadas</span>
-                </span>
-                <span className="stat-figures">
-                  <span className="row-value">{period.totalFecho}</span>
-                  <span className="stat-pct">{formatPct(period.totalPct)}</span>
-                </span>
+        <>
+          <CloseChart periods={evolution} grain={grain} />
+          {evolution.map((period) => (
+            <div key={period.key}>
+              <h2 className="section-label">{period.label}</h2>
+              <div className="list">
+                <div className="row">
+                  <span className="row-main">
+                    <span className="row-title">Entradas</span>
+                    <span className="row-sub">Data Contacto</span>
+                  </span>
+                  <span className="row-value">{period.entradas}</span>
+                </div>
+                <div className="row">
+                  <span className="row-main">
+                    <span className="row-title">Fecho positivo</span>
+                    <span className="row-sub">Só marcadas</span>
+                  </span>
+                  <span className="stat-figures">
+                    <span className="row-value">{period.positivo}</span>
+                    <span className="stat-pct">{formatPct(period.positivoPct)}</span>
+                  </span>
+                </div>
+                <div className="row">
+                  <span className="row-main">
+                    <span className="row-title">Fecho total</span>
+                    <span className="row-sub">Marcadas + descartadas</span>
+                  </span>
+                  <span className="stat-figures">
+                    <span className="row-value">{period.totalFecho}</span>
+                    <span className="stat-pct">{formatPct(period.totalPct)}</span>
+                  </span>
+                </div>
               </div>
             </div>
-          </div>
-        ))
+          ))}
+        </>
       )}
 
       <h2 className="section-label">Por origem</h2>
       <div className="list">
         {Object.keys(byOrigin).length === 0 ? (
-          <p className="center-note">Sem leads neste mês.</p>
+          <p className="center-note">Sem leads.</p>
         ) : (
           Object.entries(byOrigin)
             .sort((a, b) => b[1] - a[1])
@@ -136,7 +182,6 @@ const Dashboard: React.FC<DashboardProps> = ({ leads, allLeads, monthLabel }) =>
                   <span className="row-title">{origin}</span>
                 </span>
                 <span className="row-value">{count}</span>
-                <span className="chevron">›</span>
               </div>
             ))
         )}

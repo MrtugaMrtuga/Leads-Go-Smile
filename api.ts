@@ -1,4 +1,5 @@
 import { AdminSettings, Lead } from './types';
+import type { LeadStats } from './utils';
 
 export interface InboundMetaSyncResult {
   ok: boolean;
@@ -30,6 +31,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
 export function fetchLeads() {
   return request<Lead[]>('/api/leads');
+}
+
+export function fetchStats() {
+  return request<LeadStats>('/api/stats');
 }
 
 export function syncInboundMeta() {

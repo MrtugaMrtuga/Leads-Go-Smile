@@ -1,7 +1,7 @@
 /**
  * Leads Go Smile — web app da aba «Inbound META».
  *
- * Sheet: 1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w
+ * Sheet: 1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8
  * Ligar este projecto a essa folha (Extensões → Apps Script no documento).
  * Só lê e escreve a aba «Inbound META». A aba histórica não é usada.
  *
@@ -9,7 +9,7 @@
  * O mapeamento de colunas espelha shared/inboundMeta.js.
  */
 
-var SHEET_ID = '1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w';
+var SHEET_ID = '1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8';
 var SHEET_TAB = 'Inbound META';
 var FORBIDDEN_TAB = 'Leads (2024 - 2026)';
 

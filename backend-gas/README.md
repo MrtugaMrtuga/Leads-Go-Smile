@@ -2,7 +2,7 @@
 
 Web app grátis, ligada à folha **Leads - Go Smile**. Não há projecto Google Cloud, conta de serviço nem billing.
 
-- Sheet: `1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`
+- Sheet: `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8`
 - Aba única: **Inbound META**
 - A aba «Leads (2024 - 2026)» não é lida nem escrita.
 
@@ -10,7 +10,7 @@ O Mini (Node, porta 3040) chama este `/exec` com o segredo. O browser nunca rece
 
 ## 1. Ligar o script à folha
 
-1. Abra a folha com uma conta que a possa editar (de preferência brunoairesaugusto@gmail.com; a folha é de daniel@constantcircle.co e está partilhada).
+1. Abra a folha `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8` com uma conta que a possa editar (de preferência brunoairesaugusto@gmail.com). A folha anterior de Daniel (`1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`) já não é a fonte.
 2. **Extensões → Apps Script**.
 3. Apague o `Code.gs` de exemplo e cole [`Code.gs`](./Code.gs).
 4. Em **Definições do projecto → Mostrar ficheiro de manifesto**, confirme o [`appsscript.json`](./appsscript.json) (fuso `Europe/Lisbon`, runtime V8).

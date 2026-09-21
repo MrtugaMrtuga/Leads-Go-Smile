@@ -94,11 +94,19 @@ test('health reports the sheet proxy and an unconfigured Mini stays empty', asyn
   const app = createApp();
   const health = await call(app, 'GET', '/api/health');
   assert.equal(health.json.storage, 'apps-script');
+  assert.equal(health.json.sheetId, '1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8');
   assert.equal(health.json.sheetTab, 'Inbound META');
   assert.equal(health.json.host, 'leads.evob.org');
   assert.equal(health.json.configured, false);
   const leads = await call(app, 'GET', '/api/leads');
   assert.deepEqual(leads.json, []);
+  const stats = await call(app, 'GET', '/api/stats');
+  assert.equal(stats.status, 200);
+  assert.equal(stats.json.total, 0);
+  assert.equal(stats.json.timezone, 'Europe/Lisbon');
+  assert.equal(stats.json.weekStartsOn, 'monday');
+  assert.deepEqual(stats.json.day, []);
+  assert.deepEqual(stats.json.week, []);
 });
 
 test('listing uses Inbound META rows and ignores leads.json', async () => {
@@ -278,15 +286,86 @@ test('sheet rows are not deleted through the API', async () => {
   assert.equal(response.status, 405);
 });
 
+test('GET /api/stats aggregates every sheet lead with day and week close rates', async () => {
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  const app = createApp();
+  await withFetch(async () => {
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        leads: [
+          { id: '2', name: 'Ana', status: 'scheduled', timestamp: '2026-09-21T10:00:00.000Z', closedAt: '2026-09-21T18:00:00.000Z' },
+          { id: '3', name: 'Bia', status: 'discarded', timestamp: '2026-09-21T11:00:00.000Z', closedAt: '2026-09-22T11:00:00.000Z' },
+          { id: '4', name: 'Cia', status: 'processing', timestamp: '2026-09-21T13:00:00.000Z' },
+          { id: '5', name: 'Dia', status: 'new', timestamp: '2026-09-21T12:00:00.000Z' },
+        ],
+      }),
+      { status: 200, headers: { 'content-type': 'application/json' } }
+    );
+  }, async () => {
+    const response = await call(app, 'GET', '/api/stats');
+    assert.equal(response.status, 200);
+    assert.equal(response.json.sheetId, '1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8');
+    assert.equal(response.json.sheetTab, 'Inbound META');
+    assert.equal(response.json.total, 4);
+    const byLabel = Object.fromEntries(response.json.buckets.map((row) => [row.label, row]));
+    assert.equal(byLabel.Total.count, 4);
+    assert.equal(byLabel.Total.pct, 100);
+    assert.equal(byLabel.Descartadas.count, 1);
+    assert.equal(byLabel.Descartadas.pct, 25);
+    assert.equal(byLabel.Marcadas.count, 1);
+    assert.equal(byLabel.Marcadas.pct, 25);
+    assert.equal(byLabel['Em processamento'].count, 1);
+    assert.equal(byLabel['Em processamento'].pct, 25);
+    assert.equal(byLabel.Novas.count, 1);
+    const monday = response.json.day.find((row) => row.key === '2026-09-21');
+    const tuesday = response.json.day.find((row) => row.key === '2026-09-22');
+    assert.equal(monday.entradas, 4);
+    assert.equal(monday.positivo, 1);
+    assert.equal(monday.totalFecho, 1);
+    assert.equal(monday.positivoPct, 25);
+    assert.equal(tuesday.entradas, 0);
+    assert.equal(tuesday.totalFecho, 1);
+    assert.equal(tuesday.totalPct, null);
+    const week = response.json.week.find((row) => row.key === '2026-09-21');
+    assert.equal(week.positivo, 1);
+    assert.equal(week.totalFecho, 2);
+    assert.equal(week.totalPct, 50);
+  });
+});
+
 test('apps script is bound to Inbound META and the client bundle has no secret', () => {
   const gas = readFileSync(new URL('../backend-gas/Code.gs', import.meta.url), 'utf8');
-  const client = `${readFileSync(new URL('../api.ts', import.meta.url), 'utf8')}\n${readFileSync(new URL('../App.tsx', import.meta.url), 'utf8')}\n${readFileSync(new URL('../public/pin.js', import.meta.url), 'utf8')}`;
-  assert.match(gas, /1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w/);
+  const client = [
+    '../api.ts',
+    '../App.tsx',
+    '../constants.tsx',
+    '../views/Dashboard.tsx',
+    '../views/Inbox.tsx',
+    '../public/pin.js',
+    '../index.css',
+  ]
+    .map((file) => readFileSync(new URL(file, import.meta.url), 'utf8'))
+    .join('\n');
+  const server = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+  assert.match(gas, /1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8/);
+  assert.doesNotMatch(gas, /1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w/);
   assert.match(gas, /Inbound META/);
   assert.match(gas, /Leads \(2024 - 2026\)/);
   assert.doesNotMatch(gas, /1LMcABX/);
   assert.doesNotMatch(gas, /getSheets\(\)\[0\]/);
   assert.match(client, /PIN = '2000'/);
+  assert.match(client, /Estatísticas/);
+  assert.match(client, /fetchStats/);
+  assert.match(client, /\/api\/stats/);
+  assert.match(client, /Não atendeu/);
+  assert.match(client, /Confirmar descarte/);
+  assert.match(client, /Fecho positivo/);
+  assert.match(client, /Fecho total/);
+  assert.match(client, /chart-bar positivo/);
+  assert.match(server, /api\.get\('\/stats'/);
   assert.doesNotMatch(client, /APPS_SCRIPT_SECRET\s*=/);
   assert.doesNotMatch(client, /script\.google\.com/);
+  assert.doesNotMatch(client, /1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w/);
 });

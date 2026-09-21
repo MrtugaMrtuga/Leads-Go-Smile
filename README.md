@@ -2,7 +2,7 @@
 
 PWA de CRM para **https://leads.evob.org**, look **GoSmile V2-pt**, a correr no **Mac Mini** (Node na porta **3040**).
 
-A fonte de verdade é a Google Sheet `1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`, aba **Inbound META**, via Apps Script grátis (`/exec`). Não há projecto Google Cloud, conta de serviço nem billing. A aba «Leads (2024 - 2026)» não é lida nem escrita. O histórico que estava em `data/leads.json` deixa de contar: no arranque o ficheiro fica `[]` e não volta a ser carregado.
+A fonte de verdade é a Google Sheet `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8`, aba **Inbound META**, via Apps Script grátis (`/exec`). Não há projecto Google Cloud, conta de serviço nem billing. A aba «Leads (2024 - 2026)» não é lida nem escrita. O histórico que estava em `data/leads.json` deixa de contar: no arranque o ficheiro fica `[]` e não volta a ser carregado. A folha anterior (`1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`) já não é usada.
 
 O browser só fala com `/api` no mesmo origin. O segredo do Apps Script fica no Mini (`APPS_SCRIPT_SECRET`) e não entra no frontend.
 
@@ -19,7 +19,9 @@ A cor ao lado do nome e as listas vêm da coluna **Legenda** e do prefixo em **O
 | Vermelho, Descartadas | `Descartada` | `[status:discarded]` e `[motivo:…]` obrigatório |
 | Data em que saiu da inbox | **Data fecho** (o script cria a coluna se não existir) | `[fecho:…]` com a mesma data ISO |
 
-A secção **Estatísticas** no Dashboard mostra quantidade e percentagem de todas as leads: total, descartadas, marcadas, em processamento, e cada outro estado que exista. **Evolução temporal** (por dia e por semana) mostra entradas pela Data Contacto, fecho positivo (só marcadas) e fecho total (marcadas + descartadas). A percentagem é face às entradas do mesmo período. A data do fecho é **Data fecho**; se uma lead antiga não a tiver, conta pela Data Contacto.
+O separador do fundo chama-se **Estatísticas** (já não «Dashboard»). Mostra quantidade e percentagem de todas as leads: total, descartadas, marcadas, em processamento, e cada outro estado que exista. **Evolução temporal** (por dia e por semana, Europe/Lisbon, semana à segunda) mostra entradas pela Data Contacto, fecho positivo (só marcadas) e fecho total (marcadas + descartadas), em lista e num gráfico de barras. A percentagem é face às entradas do mesmo período. A data do fecho é **Data fecho**; se uma lead antiga não a tiver, conta pela Data Contacto.
+
+A vista pede `GET /api/stats` (os mesmos totais, calculados no servidor a partir da folha). Enquanto a resposta não chega, usa as leads já carregadas com as mesmas funções.
 
 O mapa completo está em [backend-gas/README.md](./backend-gas/README.md).
 
@@ -57,6 +59,7 @@ O servidor Express serve `dist/` e `/api` na mesma porta. Ver [DEPLOY.md](./DEPL
 | --- | --- | --- |
 | GET | `/api/health` | Estado. `storage` é `apps-script`; `configured` diz se o Mini tem URL e segredo |
 | GET | `/api/leads` | Leads da aba Inbound META (proxy server-side) |
+| GET | `/api/stats` | Totais (qty e %), fecho por dia e por semana. Mesmas regras da UI. `sheetId` confirma a folha |
 | POST | `/api/sync/inbound-meta` | Já não importa CSV nem JSON. Devolve a contagem actual da folha |
 | POST | `/api/leads` | Acrescenta uma linha (nome, telefone, email, notas) |
 | GET | `/api/leads/:id` | Lê uma lead (`id` = número da linha) |
