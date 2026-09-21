@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  closeEvolution,
   filledLeadFields,
   humanizeMetaValue,
   listBucket,
   mapDataToLeads,
   mapSheetCsv,
+  pipelineBreakdown,
   pipelineStats,
   pipelineTone,
 } from './inboundMeta.js';
@@ -232,7 +234,7 @@ test('Legenda and não atendeu stay in the inbox as processing', () => {
 });
 
 test('estatísticas are percentages of every lead', () => {
-  const stats = pipelineStats([
+  const leads = [
     { status: 'new' },
     { status: 'processing' },
     { status: 'contacted' },
@@ -243,13 +245,71 @@ test('estatísticas are percentages of every lead', () => {
     { status: 'new' },
     { status: 'scheduled' },
     { status: 'discarded' },
-  ]);
+  ];
+  const stats = pipelineStats(leads);
   assert.equal(stats.total, 10);
   assert.equal(stats.discardedPct, 20);
   assert.equal(stats.bookedPct, 20);
   assert.equal(stats.processingPct, 20);
+  const breakdown = pipelineBreakdown(leads);
+  const byLabel = Object.fromEntries(breakdown.buckets.map((row) => [row.label, row]));
+  assert.equal(byLabel.Total.count, 10);
+  assert.equal(byLabel.Total.pct, 100);
+  assert.equal(byLabel.Descartadas.count, 2);
+  assert.equal(byLabel.Marcadas.count, 2);
+  assert.equal(byLabel['Em processamento'].count, 2);
+  assert.equal(byLabel.Novas.count, 2);
+  assert.equal(byLabel.Novas.pct, 20);
+  assert.equal(byLabel.Pagas.count, 1);
+  assert.equal(byLabel.Concluídas.count, 1);
+  assert.equal(byLabel.Contactadas, undefined);
   assert.equal(listBucket('processing'), 'inbox');
   assert.equal(listBucket('scheduled') === 'inbox', false);
+});
+
+test('fecho date is read from the column or the Observações marker', () => {
+  const row = [...EXAMPLE];
+  row[13] = '[status:scheduled]\n[fecho:2026-09-21T22:00:00.000Z]\nconsulta';
+  const [fromMarker] = mapSheetCsv(toCsv([HEADERS, row]));
+  assert.equal(fromMarker.closedAt, '2026-09-21T22:00:00.000Z');
+  assert.equal(fromMarker.notes, 'consulta');
+  assert.equal(filledLeadFields(fromMarker).some((field) => String(field.value).includes('[fecho:')), false);
+
+  const headers = [...HEADERS, 'Data fecho'];
+  const values = [...row, '2026-09-18T09:00:00.000Z'];
+  const [fromColumn] = mapSheetCsv(toCsv([headers, values]));
+  assert.equal(fromColumn.closedAt, '2026-09-18T09:00:00.000Z');
+});
+
+test('close rate by day and week uses Data Contacto and Data fecho', () => {
+  const leads = [
+    { status: 'scheduled', timestamp: '2026-09-21T10:00:00.000Z', closedAt: '2026-09-21T18:00:00.000Z' },
+    { status: 'discarded', timestamp: '2026-09-21T11:00:00.000Z', closedAt: '2026-09-22T11:00:00.000Z' },
+    { status: 'new', timestamp: '2026-09-21T12:00:00.000Z' },
+    { status: 'processing', timestamp: '2026-09-21T13:00:00.000Z' },
+    { status: 'scheduled', timestamp: '2026-09-14T10:00:00.000Z', closedAt: '2026-09-14T10:00:00.000Z' },
+  ];
+  const days = closeEvolution(leads, 'day');
+  const monday = days.find((row) => row.key === '2026-09-21');
+  const tuesday = days.find((row) => row.key === '2026-09-22');
+  assert.equal(monday.entradas, 4);
+  assert.equal(monday.positivo, 1);
+  assert.equal(monday.totalFecho, 1);
+  assert.equal(monday.positivoPct, 25);
+  assert.equal(monday.totalPct, 25);
+  assert.equal(tuesday.entradas, 0);
+  assert.equal(tuesday.positivo, 0);
+  assert.equal(tuesday.totalFecho, 1);
+  assert.equal(tuesday.totalPct, null);
+  const weeks = closeEvolution(leads, 'week');
+  const thisWeek = weeks.find((row) => row.key === '2026-09-21');
+  const prevWeek = weeks.find((row) => row.key === '2026-09-14');
+  assert.equal(thisWeek.entradas, 4);
+  assert.equal(thisWeek.positivo, 1);
+  assert.equal(thisWeek.totalFecho, 2);
+  assert.equal(thisWeek.totalPct, 50);
+  assert.equal(prevWeek.positivo, 1);
+  assert.match(thisWeek.label, /21\/09\/2026 a 27\/09\/2026/);
 });
 
 test('portuguese sheet dates stay on the contact day', () => {

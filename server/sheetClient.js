@@ -148,7 +148,7 @@ export async function updateInboundLead(id, updates, options = {}) {
     if (error instanceof PipelineError) throw new SheetError(error.message, 400);
     throw error;
   }
-  if (!patch.fields.length && !patch.noteSet && !patch.status && !patch.motivoSet) {
+  if (!patch.fields.length && !patch.noteSet && !patch.status && !patch.motivoSet && !patch.fechoSet) {
     throw new SheetError('Nada para actualizar', 400);
   }
   const payload = await gasRequest({
@@ -161,6 +161,9 @@ export async function updateInboundLead(id, updates, options = {}) {
       noteSet: patch.noteSet,
       motivo: patch.motivo,
       motivoSet: patch.motivoSet,
+      fecho: patch.fecho,
+      fechoSet: patch.fechoSet,
+      fechoClear: patch.fechoClear,
       fields: patch.fields,
     },
     ...options,

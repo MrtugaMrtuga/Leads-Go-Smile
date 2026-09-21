@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Lead } from '../types';
-import { pipelineStats } from '../utils';
+import { closeEvolution, pipelineBreakdown } from '../utils';
 
 interface DashboardProps {
   leads: Lead[];
@@ -8,7 +8,8 @@ interface DashboardProps {
   monthLabel: string;
 }
 
-function formatPct(value: number) {
+function formatPct(value: number | null) {
+  if (value == null) return '—';
   const text = Number.isInteger(value) ? String(value) : value.toFixed(1).replace('.', ',');
   return `${text}%`;
 }
@@ -20,7 +21,9 @@ const Dashboard: React.FC<DashboardProps> = ({ leads, allLeads, monthLabel }) =>
   const marcados = leads.filter((l) => l.status === 'scheduled').length;
   const perdidos = leads.filter((l) => l.status === 'discarded').length;
   const [metric, setMetric] = useState<'novos' | 'contactos' | 'marcados' | 'perdidos'>('novos');
-  const stats = pipelineStats(allLeads);
+  const [grain, setGrain] = useState<'day' | 'week'>('day');
+  const stats = pipelineBreakdown(allLeads);
+  const evolution = closeEvolution(allLeads, grain);
 
   const byOrigin = leads.reduce<Record<string, number>>((acc, lead) => {
     const key = lead.source || 'Local';
@@ -55,27 +58,70 @@ const Dashboard: React.FC<DashboardProps> = ({ leads, allLeads, monthLabel }) =>
       </div>
 
       <h2 className="section-label">Estatísticas</h2>
-      <p className="sub">Percentagem de todas as leads ({stats.total})</p>
+      <p className="sub">Quantidade e percentagem de todas as leads.</p>
       <div className="list">
-        <div className="row">
-          <span className="row-main">
-            <span className="row-title">Descartadas</span>
-          </span>
-          <span className="row-value">{formatPct(stats.discardedPct)}</span>
-        </div>
-        <div className="row">
-          <span className="row-main">
-            <span className="row-title">Marcadas</span>
-          </span>
-          <span className="row-value">{formatPct(stats.bookedPct)}</span>
-        </div>
-        <div className="row">
-          <span className="row-main">
-            <span className="row-title">Em processamento</span>
-          </span>
-          <span className="row-value">{formatPct(stats.processingPct)}</span>
-        </div>
+        {stats.buckets.map((bucket) => (
+          <div key={bucket.key} className="row">
+            <span className="row-main">
+              <span className="row-title">{bucket.label}</span>
+            </span>
+            <span className="stat-figures">
+              <span className="row-value">{bucket.count}</span>
+              <span className="stat-pct">{formatPct(bucket.pct)}</span>
+            </span>
+          </div>
+        ))}
       </div>
+
+      <h2 className="section-label">Evolução temporal</h2>
+      <p className="sub">Fecho positivo: só marcadas. Fecho total: marcadas + descartadas.</p>
+      <p className="sub">A percentagem é face às entradas do mesmo dia ou semana (Data Contacto). A data do fecho é Data fecho.</p>
+      <div className="filters">
+        <button type="button" className={`filter${grain === 'day' ? ' is-on' : ''}`} onClick={() => setGrain('day')}>
+          Por dia
+        </button>
+        <button type="button" className={`filter${grain === 'week' ? ' is-on' : ''}`} onClick={() => setGrain('week')}>
+          Por semana
+        </button>
+      </div>
+      {evolution.length === 0 ? (
+        <p className="center-note">Ainda não há datas para a evolução.</p>
+      ) : (
+        evolution.map((period) => (
+          <div key={period.key}>
+            <h2 className="section-label">{period.label}</h2>
+            <div className="list">
+              <div className="row">
+                <span className="row-main">
+                  <span className="row-title">Entradas</span>
+                  <span className="row-sub">Data Contacto</span>
+                </span>
+                <span className="row-value">{period.entradas}</span>
+              </div>
+              <div className="row">
+                <span className="row-main">
+                  <span className="row-title">Fecho positivo</span>
+                  <span className="row-sub">Só marcadas</span>
+                </span>
+                <span className="stat-figures">
+                  <span className="row-value">{period.positivo}</span>
+                  <span className="stat-pct">{formatPct(period.positivoPct)}</span>
+                </span>
+              </div>
+              <div className="row">
+                <span className="row-main">
+                  <span className="row-title">Fecho total</span>
+                  <span className="row-sub">Marcadas + descartadas</span>
+                </span>
+                <span className="stat-figures">
+                  <span className="row-value">{period.totalFecho}</span>
+                  <span className="stat-pct">{formatPct(period.totalPct)}</span>
+                </span>
+              </div>
+            </div>
+          </div>
+        ))
+      )}
 
       <h2 className="section-label">Por origem</h2>
       <div className="list">

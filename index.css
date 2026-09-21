@@ -425,6 +425,22 @@ h1.page-title {
   white-space: nowrap;
 }
 
+.stat-figures {
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.stat-pct {
+  min-width: 52px;
+  text-align: right;
+  color: var(--mute);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
 .row-status {
   color: var(--mute);
   font-size: 13px;

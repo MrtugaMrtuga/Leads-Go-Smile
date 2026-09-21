@@ -10,15 +10,18 @@ PIN de acesso: **2000** (sessionStorage `gosmile-leads-unlocked`).
 
 ## Pipeline (Inbox, Marcadas, Descartadas)
 
-A cor ao lado do nome e as listas vêm da coluna **Legenda** e do prefixo em **Observações**. Não há coluna nova nem variável nova no Mini.
+A cor ao lado do nome e as listas vêm da coluna **Legenda** e do prefixo em **Observações**. Não há variável nova no Mini. A única coluna que o script pode acrescentar é **Data fecho**.
 
 | UI | Legenda | Observações |
 | --- | --- | --- |
 | Amarelo, inbox, «Não atendeu» ou contactada | `Em processamento` | `[status:processing]` ou `[status:contacted]` |
 | Verde, Marcadas (agendada) | `Marcada` | `[status:scheduled]` |
 | Vermelho, Descartadas | `Descartada` | `[status:discarded]` e `[motivo:…]` obrigatório |
+| Data em que saiu da inbox | **Data fecho** (o script cria a coluna se não existir) | `[fecho:…]` com a mesma data ISO |
 
-A secção **Estatísticas** no Dashboard é a percentagem de todas as leads (não só do mês): descartadas, marcadas (`scheduled`) e em processamento (`processing` + `contacted`). O mapa completo está em [backend-gas/README.md](./backend-gas/README.md).
+A secção **Estatísticas** no Dashboard mostra quantidade e percentagem de todas as leads: total, descartadas, marcadas, em processamento, e cada outro estado que exista. **Evolução temporal** (por dia e por semana) mostra entradas pela Data Contacto, fecho positivo (só marcadas) e fecho total (marcadas + descartadas). A percentagem é face às entradas do mesmo período. A data do fecho é **Data fecho**; se uma lead antiga não a tiver, conta pela Data Contacto.
+
+O mapa completo está em [backend-gas/README.md](./backend-gas/README.md).
 
 Publicar uma versão nova do Apps Script depois deste código. `APPS_SCRIPT_URL` e `APPS_SCRIPT_SECRET` não mudam.
 

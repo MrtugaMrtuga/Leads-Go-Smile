@@ -87,6 +87,7 @@ export function leadPatchToFields(updates = {}, now = new Date()) {
   }
 
   const status = normalizeStatus(updates.status || updates.estado);
+  const stamp = now instanceof Date ? now.toISOString() : new Date(now).toISOString();
 
   let motivo = cleanMotivo(updates.motivo ?? updates.discardReason ?? '');
   let motivoSet = updates.motivo !== undefined || updates.discardReason !== undefined;
@@ -101,8 +102,21 @@ export function leadPatchToFields(updates = {}, now = new Date()) {
     if (noteSet && cleanMotivo(splitStatusNote(note).note) === motivo) note = '';
   }
 
+  let fecho = '';
+  let fechoSet = false;
+  let fechoClear = false;
+  if (status === 'scheduled' || status === 'discarded') {
+    fecho = stamp;
+    fechoSet = true;
+    push(writableByKey('data_fecho'), stamp, { ifBlank: true });
+  }
+  if (status === 'new' || status === 'contacted' || status === 'processing') {
+    fechoClear = true;
+    fechoSet = true;
+    push(writableByKey('data_fecho'), '');
+  }
+
   if (status && status !== 'new') {
-    const stamp = now instanceof Date ? now.toISOString() : new Date(now).toISOString();
     push(writableByKey('primeiro_contacto'), stamp, { ifBlank: true });
   }
   if (status === 'paid') push(writableByKey('pagamento'), 'Pago');
@@ -157,6 +171,9 @@ export function leadPatchToFields(updates = {}, now = new Date()) {
     noteSet: Boolean(noteSet),
     motivo,
     motivoSet: Boolean(motivoSet),
+    fecho,
+    fechoSet: Boolean(fechoSet),
+    fechoClear: Boolean(fechoClear),
     fields,
   };
 }

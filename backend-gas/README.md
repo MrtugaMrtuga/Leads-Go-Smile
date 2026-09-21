@@ -72,11 +72,11 @@ Devolve JSON com `leads` (objectos com `id` = número da linha, `nome`, `telefon
 }
 ```
 
-Só grava cabeçalhos que já existem na linha 1. Não cria colunas.
+As outras gravações só usam cabeçalhos que já existem. A excepção é **Data fecho**, criada no fim da linha 1 quando ainda não está lá.
 
 ## Colunas do pipeline
 
-Não há colunas novas nem variáveis novas no Mini. `APPS_SCRIPT_URL` e `APPS_SCRIPT_SECRET` chegam.
+Não há variáveis novas no Mini. `APPS_SCRIPT_URL` e `APPS_SCRIPT_SECRET` chegam. A única coluna nova possível é **Data fecho**.
 
 | O quê | Onde na aba Inbound META | Valores |
 | --- | --- | --- |
@@ -85,6 +85,9 @@ Não há colunas novas nem variáveis novas no Mini. `APPS_SCRIPT_URL` e `APPS_S
 | Motivo do descarte | **Observações** (a primeira), linha `[motivo:…]` | Obrigatório para passar a `discarded`. Sobrevive ao reload. A UI mostra o texto, não o marcador |
 | Contacto | **1º Contacto** | Data ISO na primeira vez que o estado deixa de ser `new`, incluindo «Não atendeu» |
 | Marcação | **Data Primeira Consulta** e **Médico Orçamento Médico Tratamento** | Já usados por Agendar, em conjunto com Legenda `Marcada` |
+| Data do fecho | **Data fecho** (criada na primeira gravação se a coluna não existir) e, na mesma célula de Observações, `[fecho:…]` | ISO de quando a lead saiu da inbox (marcada ou descartada). A primeira data mantém-se. Voltar à inbox apaga-a. Se faltar nas linhas antigas, a evolução usa a Data Contacto |
+
+Na primeira vez que uma lead passa a marcada ou descartada, o script acrescenta o cabeçalho **Data fecho** no fim da linha 1, se ele ainda não existir. Não mexe nas outras colunas.
 
 «Não atendeu» grava `[status:processing]`, Legenda `Em processamento` e 1º Contacto. A lead continua na inbox. Descartar sem motivo é recusado (`Motivo é obrigatório para descartar`) e a linha não muda.
 

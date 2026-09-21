@@ -16,6 +16,7 @@ export interface Lead {
   status: LeadStatus;
   isContacted: boolean;
   discardReason?: string;
+  closedAt?: string;
   value?: number;
   commission?: number;
   notes?: string;

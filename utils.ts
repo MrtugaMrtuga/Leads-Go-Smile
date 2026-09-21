@@ -1,10 +1,12 @@
 
 import { Lead, LeadFormField } from './types';
 import {
+  closeEvolution as closeEvolutionJs,
   filledLeadFields as filledLeadFieldsJs,
   humanizeMetaValue as humanizeMetaValueJs,
   listBucket as listBucketJs,
   mapDataToLeads as mapDataToLeadsJs,
+  pipelineBreakdown as pipelineBreakdownJs,
   pipelineStats as pipelineStatsJs,
   pipelineTone as pipelineToneJs,
 } from './shared/inboundMeta.js';
@@ -38,7 +40,27 @@ export function pipelineStats(leads: Lead[]) {
     discardedPct: number;
     bookedPct: number;
     processingPct: number;
+    buckets: { key: string; label: string; count: number; pct: number }[];
   };
+}
+
+export function pipelineBreakdown(leads: Lead[]) {
+  return pipelineBreakdownJs(leads) as {
+    total: number;
+    buckets: { key: string; label: string; count: number; pct: number }[];
+  };
+}
+
+export function closeEvolution(leads: Lead[], grain: 'day' | 'week') {
+  return closeEvolutionJs(leads, grain) as {
+    key: string;
+    label: string;
+    entradas: number;
+    positivo: number;
+    totalFecho: number;
+    positivoPct: number | null;
+    totalPct: number | null;
+  }[];
 }
 
 export const formatMonthYear = (date: Date): string => {
