@@ -103,7 +103,12 @@ test('mapSheetCsv keeps every filled Inbound META field and hides empties', () =
   assert.equal(lead.name, 'Ida Cristina Albuquerque Malho Rodrigues de Oliveira');
   assert.equal(lead.phone, '351962852158');
   assert.equal(lead.email, 'cristina.oliveira.consult@gmail.com');
+  assert.equal(lead.id, '2');
+  assert.equal(lead.nome, lead.name);
+  assert.equal(lead.telefone, lead.phone);
+  assert.equal(lead.dataContacto, lead.timestamp);
   assert.equal(lead.notes, 'nota final da clínica');
+  assert.equal(lead.crm.observacoes_final, 'nota final da clínica');
 
   const labels = lead.formFields.map((field) => field.label);
   assert.ok(labels.includes('O que gostaria de melhorar no seu sorriso?'));
@@ -162,4 +167,29 @@ test('mapDataToLeads reads sheet objects and preserves stored leads', () => {
   assert.equal(stored[0].name, 'Ana Rita Costa');
   assert.equal(stored[0].formFields, undefined);
   assert.deepEqual(filledLeadFields(stored[0]), []);
+});
+
+test('status marker is authoritative and hidden from the detail fields', () => {
+  const row = [...EXAMPLE];
+  row[13] = '[status:contacted]\nliguei hoje';
+  const [lead] = mapSheetCsv(toCsv([HEADERS, row]));
+  assert.equal(lead.status, 'contacted');
+  assert.equal(lead.notes, 'liguei hoje');
+  assert.equal(lead.crm.observacoes, 'liguei hoje');
+  const visible = filledLeadFields(lead);
+  assert.equal(visible.find((field) => field.key === 'observacoes').value, 'Liguei hoje');
+  assert.equal(visible.some((field) => String(field.value).includes('[status:')), false);
+});
+
+test('portuguese sheet dates stay on the contact day', () => {
+  const [lead] = mapSheetCsv(
+    toCsv([
+      ['Data Contacto', 'Nome Paciente'],
+      ['20/09/2026 18:14', 'Ida Cristina'],
+    ])
+  );
+  const date = new Date(lead.timestamp);
+  assert.equal(date.getFullYear(), 2026);
+  assert.equal(date.getMonth(), 8);
+  assert.equal(date.getDate(), 20);
 });

@@ -8,7 +8,7 @@ import Accounts from './views/Accounts';
 import Admin from './views/Admin';
 import { AppView, Lead, AdminSettings, LeadUpdatePayload } from './types';
 import { formatMonthYear, getLeadsByMonth, mapDataToLeads } from './utils';
-import { createLead, fetchLeads, fetchSettings, saveSettings, sendReminder, syncInboundMeta, updateLead } from './api';
+import { createLead, fetchHealth, fetchLeads, fetchSettings, saveSettings, sendReminder, updateLead } from './api';
 
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<AppView>('inbox');
@@ -23,23 +23,15 @@ const App: React.FC = () => {
     setIsLoading(true);
     setFetchError(null);
     try {
-      let sheetWarning: string | null = null;
-      try {
-        await syncInboundMeta();
-      } catch (syncError) {
-        console.error(syncError);
-        sheetWarning = 'Folha Inbound META indisponível';
-      }
-      const [nextLeads, nextSettings] = await Promise.all([fetchLeads(), fetchSettings()]);
+      const [nextLeads, nextSettings, health] = await Promise.all([fetchLeads(), fetchSettings(), fetchHealth()]);
       setLeads(mapDataToLeads(nextLeads));
       setSettings(nextSettings);
-      if (sheetWarning) {
-        setFetchError(sheetWarning);
-        setTimeout(() => setFetchError((current) => (current === sheetWarning ? null : current)), 4000);
+      if (health.configured === false) {
+        setFetchError('Defina APPS_SCRIPT_URL e APPS_SCRIPT_SECRET no Mini');
       }
     } catch (error) {
       console.error(error);
-      setFetchError('API local indisponível');
+      setFetchError(error instanceof Error ? error.message : 'API local indisponível');
     } finally {
       setIsLoading(false);
     }

@@ -20,5 +20,5 @@ jobs:
         run: |
           PORT=3040 NODE_ENV=production node server/index.js &
           sleep 1
-          curl -sf http://127.0.0.1:3040/api/health | grep -E 'leads.evob.org|GoSmile'
-          curl -sf http://127.0.0.1:3040/api/leads | grep Ana
+          curl -sf http://127.0.0.1:3040/api/health | grep -E 'leads.evob.org|GoSmile|apps-script'
+          curl -sf http://127.0.0.1:3040/api/leads | grep -x '\[\]'
