@@ -3,7 +3,6 @@ import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { leadFromRecord } from '../shared/inboundMeta.js';
-import { syncInboundMeta } from './metaSync.js';
 import {
   addReminder,
   createLead,
@@ -133,18 +132,6 @@ export function createApiRouter() {
     const lead = await getLead(req.params.id);
     if (!lead) return res.status(404).json({ error: 'Lead não encontrada' });
     res.json(lead);
-  });
-
-  api.post('/sync/meta', async (req, res) => {
-    try {
-      const result = await syncInboundMeta({
-        csv: typeof req.body?.csv === 'string' ? req.body.csv : undefined,
-        rows: Array.isArray(req.body?.rows) ? req.body.rows : undefined,
-      });
-      res.json(result);
-    } catch (error) {
-      res.status(502).json({ error: error.message || 'Falha ao sincronizar Inbound META' });
-    }
   });
 
   api.post('/leads', async (req, res) => {

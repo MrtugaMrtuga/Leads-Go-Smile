@@ -3,6 +3,7 @@ import test from 'node:test';
 import {
   filledDetailFields,
   humanizeMetaValue,
+  mapDataToLeads,
   mergeInboundLead,
   patchesFromCsv,
 } from './inboundMeta.js';
@@ -126,6 +127,50 @@ test('Ida Cristina row keeps every filled Meta answer and hides empty cells', ()
   assert.equal(byLabel.Facebook, undefined);
   assert.equal(byLabel.Observações, undefined);
   assert.equal(fields.some((field) => String(field.value).includes('_')), false);
+});
+
+test('mapDataToLeads keeps Apps Script keys and an already stored lead', () => {
+  const [fromGas] = mapDataToLeads([
+    {
+      row_number: '2',
+      name: 'Ida Cristina Albuquerque Malho Rodrigues de Oliveira',
+      phone: '351962852158',
+      email: 'cristina.oliveira.consult@gmail.com',
+      date: '2026-09-20T17:14:04.000Z',
+      status: 'new',
+      smile_goal: 'substituir_dentes_em_falta',
+      treatment_type: 'outro_tratamento',
+      current_stage: 'quero_marcar_uma_consulta',
+      timing: 'o_mais_rapidamente_possível',
+      knows_clinic: 'não,_seria_a_primeira_vez',
+      contact_preference: 'whatsapp',
+    },
+  ]);
+  const labels = Object.fromEntries(filledDetailFields(fromGas).map((field) => [field.label, field.value]));
+  assert.equal(fromGas.id, '2');
+  assert.equal(fromGas.status, 'new');
+  assert.equal(labels['O que gostaria de melhorar no seu sorriso?'], 'Substituir dentes em falta');
+  assert.equal(labels['Como prefere que a equipa entre em contacto consigo?'], 'Whatsapp');
+  assert.equal(labels['1º Contacto'], undefined);
+
+  const [stored] = mapDataToLeads([
+    {
+      id: '1104',
+      externalId: '1104',
+      name: 'Sofia Mendes',
+      phone: '351967889900',
+      email: 'sofia.mendes@outlook.pt',
+      timestamp: '2026-09-05T11:05:00.000Z',
+      status: 'contacted',
+      isContacted: true,
+      notes: 'Não atendeu.',
+      source: 'Facebook',
+    },
+  ]);
+  assert.equal(stored.status, 'contacted');
+  assert.equal(stored.notes, 'Não atendeu.');
+  assert.equal(stored.meta, undefined);
+  assert.equal(filledDetailFields(stored).some((field) => field.kind === 'form'), false);
 });
 
 test('merge keeps local CRM edits and still refreshes form answers', () => {

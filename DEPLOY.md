@@ -32,23 +32,7 @@ curl -s http://127.0.0.1:3040/api/health
 # {"ok":true,"app":"GoSmile Leads","host":"leads.evob.org","storage":"local-json"}
 ```
 
-A UI e a API partilham a mesma origem. Não configure webhooks, Gemini nem Firebase.
-
-A sincronização Inbound META é um `GET` ao CSV público da Sheet (ou a `SCRIPT_URL`, se a definir). Não usa service account. Ver [README](./README.md#inbound-meta). No Mini, export opcional no launchd:
-
-```xml
-<key>EnvironmentVariables</key>
-<dict>
-  <key>PORT</key>
-  <string>3040</string>
-  <key>NODE_ENV</key>
-  <string>production</string>
-  <!-- opcional, só se o CSV público deixar de chegar:
-  <key>SCRIPT_URL</key>
-  <string>https://script.google.com/macros/s/…/exec</string>
-  -->
-</dict>
-```
+A UI e a API partilham a mesma origem. Não configure webhooks, Gemini, Firebase nem um segundo cliente da Sheet. A aba Inbound META lê-se no Apps Script do repo Evobtob; ver [docs/evobtob-gas-inbound-meta.md](./docs/evobtob-gas-inbound-meta.md).
 
 ## 4. launchd (sobe no login)
 

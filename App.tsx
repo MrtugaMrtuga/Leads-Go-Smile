@@ -8,7 +8,8 @@ import Accounts from './views/Accounts';
 import Admin from './views/Admin';
 import { AppView, Lead, AdminSettings, LeadUpdatePayload } from './types';
 import { formatMonthYear, getLeadsByMonth } from './utils';
-import { createLead, fetchLeads, fetchSettings, saveSettings, sendReminder, syncInboundMeta, updateLead } from './api';
+import { createLead, fetchLeads, fetchSettings, saveSettings, sendReminder, updateLead } from './api';
+import { mapDataToLeads } from './shared/inboundMeta.js';
 
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<AppView>('inbox');
@@ -24,14 +25,8 @@ const App: React.FC = () => {
     setFetchError(null);
     try {
       const [nextLeads, nextSettings] = await Promise.all([fetchLeads(), fetchSettings()]);
-      setLeads(nextLeads);
+      setLeads(mapDataToLeads(nextLeads));
       setSettings(nextSettings);
-      try {
-        const synced = await syncInboundMeta();
-        if (Array.isArray(synced.leads)) setLeads(synced.leads);
-      } catch (syncError) {
-        console.error(syncError);
-      }
     } catch (error) {
       console.error(error);
       setFetchError('API local indisponível');

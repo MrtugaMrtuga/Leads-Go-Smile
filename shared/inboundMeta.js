@@ -52,6 +52,30 @@ for (const column of INBOUND_META_COLUMNS) {
   COLUMN_BY_HEADER.set(key, column);
 }
 
+/**
+ * Keys Evobtob `getLeads_()` should emit after the Inbound META patch.
+ * See docs/evobtob-gas-inbound-meta.md.
+ */
+const GAS_KEY_TO_COLUMN = {
+  nome_paciente: 'name',
+  smile_goal: 'smileGoal',
+  treatment_type: 'treatment',
+  current_stage: 'stage',
+  timing: 'timing',
+  knows_clinic: 'knowsClinic',
+  contact_preference: 'contactPreference',
+  first_contact: 'firstContact',
+  second_contact_date: 'secondContactDate',
+  second_contact: 'secondContact',
+  next_appointment: 'nextAppointment',
+  patient_number: 'patientNumber',
+  done_flag: 'done',
+  budget_doctor: 'budgetDoctor',
+  contact_date: 'contactDate',
+};
+
+const LEAD_STATUSES = new Set(['new', 'contacted', 'discarded', 'scheduled', 'positive', 'completed', 'paid']);
+
 const CANONICAL_TARGETS = {
   name: 'name',
   nome: 'name',
@@ -60,6 +84,7 @@ const CANONICAL_TARGETS = {
   email: 'email',
   timestamp: 'timestamp',
   data: 'timestamp',
+  date: 'timestamp',
   notes: 'notes',
   comentarios: 'notes',
   doctor: 'doctor',
@@ -186,13 +211,17 @@ export function leadFromPairs(pairs, seed = {}) {
     seen[headerNorm] = occurrence + 1;
     const value = cellText(raw);
     const column = columnFor(key, occurrence);
-    if (column) {
-      if (value) lead.meta[column.id] = value;
-      assignTarget(lead, column.target, value);
+    const underscored = headerNorm.replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
+    const gasColumnId = GAS_KEY_TO_COLUMN[underscored];
+    const gasColumn = gasColumnId ? INBOUND_META_COLUMNS.find((item) => item.id === gasColumnId) : null;
+    const resolved = column || gasColumn;
+    if (resolved) {
+      if (value && resolved.kind !== 'contact') lead.meta[resolved.id] = value;
+      assignTarget(lead, resolved.target, value);
       continue;
     }
 
-    const canonical = CANONICAL_TARGETS[headerNorm.replace(/[^a-z0-9]+/g, '_')];
+    const canonical = CANONICAL_TARGETS[underscored];
     if (canonical) {
       assignTarget(lead, canonical, value);
       continue;
@@ -227,6 +256,46 @@ export function leadFromRecord(record) {
   if (!record || typeof record !== 'object' || Array.isArray(record)) return null;
   const pairs = Object.entries(record).filter(([key]) => key !== 'meta' && key !== 'metaExtras');
   return leadFromPairs(pairs, record);
+}
+
+/**
+ * Front mapper: sheet row, Apps Script lead, or a lead already stored in JSON
+ * → Lead with `meta` for every filled Inbound META answer.
+ */
+export function mapDataToLead(row) {
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return null;
+  const mapped = leadFromRecord(row) || {};
+  const name = cellText(row.name) || cellText(mapped.name);
+  const phone = cellText(row.phone) || cellText(mapped.phone);
+  const email = cellText(row.email) || cellText(mapped.email);
+  if (!name && !phone && !email) return null;
+
+  const status = LEAD_STATUSES.has(row.status) ? row.status : 'new';
+  const lead = {
+    id: cellText(row.id || row.row_number || row.lead_id || row.externalId),
+    externalId: cellText(row.externalId || row.row_number || row.lead_id || row.id),
+    name: name || 'Sem Nome',
+    phone: String(phone),
+    email,
+    timestamp: cellText(row.timestamp) || cellText(mapped.timestamp),
+    status,
+    isContacted: row.isContacted !== undefined ? Boolean(row.isContacted) : status !== 'new',
+    notes: cellText(row.notes) || cellText(mapped.notes),
+    doctor: cellText(row.doctor) || cellText(mapped.doctor),
+    appointmentDate: cellText(row.appointmentDate) || cellText(mapped.appointmentDate),
+    value: Number(row.value) || Number(mapped.value) || 0,
+    source: cellText(row.source) || cellText(mapped.source),
+  };
+  if (!lead.id) lead.id = lead.externalId;
+  if (!lead.source) delete lead.source;
+  if (mapped.meta) lead.meta = mapped.meta;
+  if (mapped.metaExtras) lead.metaExtras = mapped.metaExtras;
+  return lead;
+}
+
+export function mapDataToLeads(data) {
+  if (!Array.isArray(data)) return [];
+  return data.map(mapDataToLead).filter(Boolean);
 }
 
 export function parseCsv(text) {
@@ -292,13 +361,6 @@ export function patchesFromCsv(csvText) {
   }
 
   return patches;
-}
-
-export function sheetCsvUrl(env = process.env) {
-  if (env.META_SHEET_CSV_URL) return env.META_SHEET_CSV_URL;
-  const id = env.META_SHEET_ID || META_SHEET_ID;
-  const tab = env.META_SHEET_TAB || META_SHEET_TAB;
-  return `https://docs.google.com/spreadsheets/d/${id}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tab)}`;
 }
 
 function formatContactDate(value) {
