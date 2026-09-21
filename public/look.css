@@ -210,6 +210,7 @@ h1.page-title {
   font-weight: 300;
   font-size: 28px;
   margin: 0 0 8px;
+  overflow-wrap: anywhere;
 }
 
 .sub,
@@ -592,6 +593,47 @@ textarea.field:focus {
   border-color: #000;
   color: #000;
   font-weight: 500;
+}
+
+.meta-block {
+  margin: 0 0 8px;
+}
+
+.meta-block .section-label {
+  margin-top: 18px;
+}
+
+.meta-fields {
+  margin: 0;
+}
+
+.meta-field {
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+
+.meta-fields .meta-field:last-child {
+  border-bottom: 1px solid var(--line);
+}
+
+.meta-field dt {
+  margin: 0 0 2px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--mute);
+}
+
+.meta-field dd {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 400;
+  color: #000;
+  overflow-wrap: anywhere;
+}
+
+.meta-field a {
+  color: inherit;
+  text-decoration: none;
 }
 
 .tabs {

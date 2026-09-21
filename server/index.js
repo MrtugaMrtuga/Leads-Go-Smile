@@ -2,6 +2,8 @@ import express from 'express';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { leadFromRecord } from '../shared/inboundMeta.js';
+import { syncInboundMeta } from './metaSync.js';
 import {
   addReminder,
   createLead,
@@ -65,12 +67,15 @@ function normalizeBody(body = {}) {
   if (source !== undefined) out.source = source;
   if (status !== undefined) out.status = status;
   if (body.isContacted !== undefined) out.isContacted = Boolean(body.isContacted);
-  else if (body['Data Contacto'] || body['Responsável']) out.isContacted = true;
+  else if (body['Responsável'] || (body['Data Contacto'] && !body['O que gostaria de melhorar no seu sorriso?'] && !body.meta)) {
+    out.isContacted = true;
+  }
   return out;
 }
 
 function sanitizeLeadInput(raw = {}) {
-  const body = normalizeBody(raw);
+  const inbound = leadFromRecord(raw);
+  const body = normalizeBody(inbound ? { ...inbound, ...raw } : raw);
   const out = {};
   if (body.name !== undefined) out.name = String(body.name);
   if (body.phone !== undefined) out.phone = String(body.phone);
@@ -94,6 +99,17 @@ function sanitizeLeadInput(raw = {}) {
   if (body.valor_fechado !== undefined && out.value === undefined) {
     out.value = Number(body.valor_fechado) || 0;
   }
+  if (inbound?.meta && Object.keys(inbound.meta).length) out.meta = inbound.meta;
+  if (inbound?.metaExtras?.length) out.metaExtras = inbound.metaExtras;
+  if (!out.source && inbound?.source) out.source = inbound.source;
+  if (!out.timestamp && inbound?.timestamp) out.timestamp = inbound.timestamp;
+  if (!out.name && inbound?.name) out.name = inbound.name;
+  if (!out.phone && inbound?.phone) out.phone = String(inbound.phone);
+  if (!out.email && inbound?.email) out.email = inbound.email;
+  if (!out.notes && inbound?.notes) out.notes = inbound.notes;
+  if (!out.doctor && inbound?.doctor) out.doctor = inbound.doctor;
+  if (!out.appointmentDate && inbound?.appointmentDate) out.appointmentDate = inbound.appointmentDate;
+  if (out.value === undefined && inbound?.value) out.value = inbound.value;
   return out;
 }
 
@@ -117,6 +133,18 @@ export function createApiRouter() {
     const lead = await getLead(req.params.id);
     if (!lead) return res.status(404).json({ error: 'Lead não encontrada' });
     res.json(lead);
+  });
+
+  api.post('/sync/meta', async (req, res) => {
+    try {
+      const result = await syncInboundMeta({
+        csv: typeof req.body?.csv === 'string' ? req.body.csv : undefined,
+        rows: Array.isArray(req.body?.rows) ? req.body.rows : undefined,
+      });
+      res.json(result);
+    } catch (error) {
+      res.status(502).json({ error: error.message || 'Falha ao sincronizar Inbound META' });
+    }
   });
 
   api.post('/leads', async (req, res) => {

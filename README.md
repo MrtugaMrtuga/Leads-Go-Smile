@@ -43,3 +43,28 @@ O servidor Express serve `dist/` e `/api` na mesma porta. Ver [DEPLOY.md](./DEPL
 | GET / POST | `/api/reminders` | Lembretes só em disco (sem email) |
 
 Ficheiros: `data/leads.json`, `data/settings.json`, `data/reminders.json`. Se `leads.json` não existir, o servidor copia `data/seed-leads.json`.
+
+## Inbound META
+
+O detalhe da lead mostra todas as respostas preenchidas do formulário Meta (e os campos CRM da mesma linha). O mapa coluna da Sheet → etiqueta está em `shared/inboundMeta.js`. Valores `snake_case` passam a texto legível (`substituir_dentes_em_falta` → `Substituir dentes em falta`). Campos vazios não aparecem.
+
+A app lê a aba **Inbound META** da Sheet `1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w` e grava em `data/leads.json` (telefone ou email identificam a mesma pessoa; o estado, as notas, o médico, a consulta e o valor já editados na app mantêm-se).
+
+`POST /api/sync/meta` corre ao abrir a app e no botão **Actualizar**. Sem service account e sem faturação Google Cloud.
+
+Por omissão usa o CSV público:
+
+`https://docs.google.com/spreadsheets/d/1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w/gviz/tq?tqx=out:csv&sheet=Inbound%20META`
+
+Se a Sheet deixar de estar legível por link, defina um destes:
+
+| Variável | Uso |
+| --- | --- |
+| `SCRIPT_URL` | Web app Apps Script (gratuito) que faz `GET` e devolve JSON: uma lista, ou `{ "data": [ ... ] }` / `{ "leads": [ ... ] }` com os nomes das colunas. Tem prioridade sobre o CSV. |
+| `META_SHEET_CSV_URL` | URL CSV alternativa |
+| `META_SHEET_ID` | Id da Sheet (omissão: o id acima) |
+| `META_SHEET_TAB` | Nome da aba (omissão: `Inbound META`) |
+
+Também aceita `POST /api/sync/meta` com `{ "csv": "..." }` ou `{ "rows": [ { "Nome Paciente": "..." } ] }` para importar sem rede.
+
+Não é preciso Apps Script enquanto o CSV público responder.

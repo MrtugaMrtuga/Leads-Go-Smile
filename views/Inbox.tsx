@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from 'react';
+import LeadDetailFields from '../components/LeadDetailFields';
+import { smileGoalLabel } from '../shared/inboundMeta.js';
 import { Lead } from '../types';
 
 interface InboxProps {
@@ -13,7 +15,7 @@ interface InboxProps {
 type Filter = 'todos' | 'novos' | 'contactados';
 type ModalType = 'none' | 'comment' | 'discard' | 'schedule' | 'create';
 
-const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSyncing }) => {
+const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, onSync, isSyncing }) => {
   const [filter, setFilter] = useState<Filter>('todos');
   const [activeModal, setActiveModal] = useState<ModalType>('none');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -97,6 +99,9 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
       </div>
 
       <div className="tools">
+        <button type="button" onClick={onSync} disabled={isSyncing}>
+          Actualizar
+        </button>
         <button type="button" onClick={() => open('create')}>
           Nova lead
         </button>
@@ -111,7 +116,9 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
               <span className="row-main">
                 <span className="row-title">{lead.name}</span>
                 <span className="row-sub">
-                  {lead.source || 'Local'} · {timeAgo(lead.timestamp)}
+                  {lead.source || 'Local'}
+                  {' · '}
+                  {smileGoalLabel(lead) || timeAgo(lead.timestamp)}
                 </span>
               </span>
               <span className="row-status">{statusLabel(lead.status)}</span>
@@ -127,7 +134,7 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
               ← Voltar
             </button>
             <h1 className="page-title">{selectedLead.name}</h1>
-            <p className="sub">{selectedLead.email || selectedLead.phone}</p>
+            <LeadDetailFields lead={selectedLead} />
 
             {activeModal === 'comment' && (
               <>

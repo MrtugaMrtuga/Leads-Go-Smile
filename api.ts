@@ -22,6 +22,13 @@ export function fetchLeads() {
   return request<Lead[]>('/api/leads');
 }
 
+export function syncInboundMeta() {
+  return request<{ ok: boolean; created: number; updated: number; leads: Lead[] }>('/api/sync/meta', {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
 export function fetchLead(id: string) {
   return request<Lead>(`/api/leads/${encodeURIComponent(id)}`);
 }

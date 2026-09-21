@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import LeadDetailFields from '../components/LeadDetailFields';
 import { Lead } from '../types';
 import { formatCurrency } from '../utils';
 
@@ -51,7 +52,7 @@ const Agenda: React.FC<AgendaProps> = ({ leads, onUpdateStatus, onSendReminder, 
             <p className="sub">
               {selected.appointmentDate || 'Data a definir'} · {selected.doctor || 'Sem médico'}
             </p>
-            {selected.notes && <p className="sub">{selected.notes}</p>}
+            <LeadDetailFields lead={selected} />
             <button
               type="button"
               className="cta sec"

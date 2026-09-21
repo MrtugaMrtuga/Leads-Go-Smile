@@ -9,7 +9,8 @@ export default defineConfig({
     port: 3000,
     host: '0.0.0.0',
     proxy: {
-      '/api': {
+      // Match /api/leads, not the frontend module /api.ts.
+      '/api/': {
         target: 'http://127.0.0.1:3040',
         changeOrigin: true,
       },

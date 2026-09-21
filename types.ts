@@ -15,6 +15,10 @@ export interface Lead {
   doctor?: string;
   appointmentDate?: string;
   source?: string;
+  /** Inbound META answers keyed by column id. See shared/inboundMeta.js. */
+  meta?: Record<string, string>;
+  /** Filled sheet columns that are not in the known map. */
+  metaExtras?: { label: string; value: string }[];
 }
 
 export type AppView = 'resumo' | 'inbox' | 'lixo' | 'visitas' | 'contas' | 'admin';
