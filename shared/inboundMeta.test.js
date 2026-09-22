@@ -11,6 +11,7 @@ import {
   pipelineBreakdown,
   pipelineStats,
   pipelineTone,
+  sortLeadsNewestFirst,
 } from './inboundMeta.js';
 
 const HEADERS = [
@@ -347,6 +348,20 @@ test('close window is a Lisbon range of 7, 30, or 90 days', () => {
   assert.ok(quarter.points.length < 20);
   assert.equal(quarter.totals.marcacoes, 2);
   assert.equal(quarter.points[0].key <= '2026-09-14', true);
+});
+
+test('lead lists put the newest Data Contacto first', () => {
+  const sorted = sortLeadsNewestFirst([
+    { id: '2', timestamp: '2026-09-20T10:00:00.000Z', name: 'Antiga' },
+    { id: '4', dataContacto: '2026-09-21T10:00:00.000Z', name: 'Mesmo instante, linha menor' },
+    { id: '9', timestamp: '2026-09-21T10:00:00.000Z', name: 'Mais recente' },
+    { id: '3', timestamp: '2026-09-21T09:00:00.000Z', name: 'Mais cedo no dia' },
+    { id: '1', timestamp: '', name: 'Sem data' },
+  ]);
+  assert.deepEqual(
+    sorted.map((lead) => lead.name),
+    ['Mais recente', 'Mesmo instante, linha menor', 'Mais cedo no dia', 'Antiga', 'Sem data']
+  );
 });
 
 test('portuguese sheet dates stay on the contact day', () => {

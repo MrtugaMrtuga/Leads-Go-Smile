@@ -1,7 +1,7 @@
 import React from 'react';
 import LeadName from '../components/LeadName';
 import { Lead } from '../types';
-import { formatCurrency } from '../utils';
+import { formatCurrency, sortLeadsNewestFirst } from '../utils';
 
 interface AccountsProps {
   leads: Lead[];
@@ -18,7 +18,7 @@ const Accounts: React.FC<AccountsProps> = ({ leads, onUpdateStatus, monthLabel, 
         <p className="center-note">Nenhuma conta em {monthLabel.toLowerCase()}.</p>
       ) : (
         <div className="list">
-          {leads.map((lead) => (
+          {sortLeadsNewestFirst(leads).map((lead) => (
             <div key={lead.id} className="row">
               <span className="row-main">
                     <LeadName lead={lead} className="row-title" />

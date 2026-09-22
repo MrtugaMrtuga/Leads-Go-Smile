@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import LeadName from '../components/LeadName';
 import { Lead } from '../types';
-import { formatCurrency } from '../utils';
+import { formatCurrency, sortLeadsNewestFirst } from '../utils';
 
 interface AdminProps {
   settings: { commissionPercent: number };
@@ -49,8 +49,8 @@ const Admin: React.FC<AdminProps> = ({
     );
   }
 
-  const completedLeads = leads.filter((l) => l.status === 'completed');
-  const paidLeads = leads.filter((l) => l.status === 'paid');
+  const completedLeads = sortLeadsNewestFirst(leads.filter((l) => l.status === 'completed'));
+  const paidLeads = sortLeadsNewestFirst(leads.filter((l) => l.status === 'paid'));
   const commission = (list: Lead[]) =>
     list.reduce((acc, lead) => acc + ((lead.value || 0) * (settings.commissionPercent / 100)), 0);
 

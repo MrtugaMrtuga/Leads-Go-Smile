@@ -742,6 +742,29 @@ function normalizeStoredLead(item, index) {
   return lead;
 }
 
+function leadSortTime(lead) {
+  const raw = lead?.timestamp || lead?.dataContacto || '';
+  const time = new Date(raw).getTime();
+  return Number.isNaN(time) ? Number.NEGATIVE_INFINITY : time;
+}
+
+function leadSortRow(lead) {
+  const row = Number(lead?.row ?? lead?.id);
+  return Number.isFinite(row) ? row : 0;
+}
+
+export function compareLeadsNewestFirst(a, b) {
+  const byTime = leadSortTime(b) - leadSortTime(a);
+  if (byTime) return byTime;
+  const byRow = leadSortRow(b) - leadSortRow(a);
+  if (byRow) return byRow;
+  return String(b?.id || '').localeCompare(String(a?.id || ''));
+}
+
+export function sortLeadsNewestFirst(leads) {
+  return [...(Array.isArray(leads) ? leads : [])].sort(compareLeadsNewestFirst);
+}
+
 export function mapDataToLeads(data) {
   if (!Array.isArray(data)) return [];
   return data
