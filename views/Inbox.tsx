@@ -15,7 +15,7 @@ interface InboxProps {
   isSyncing?: boolean;
 }
 
-type Filter = 'inbox' | 'marcadas' | 'descartadas';
+type Filter = 'inbox' | 'descartadas';
 type ModalType = 'none' | 'comment' | 'discard' | 'schedule' | 'create';
 
 const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSyncing }) => {
@@ -109,9 +109,6 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
         <button type="button" className={`filter${filter === 'inbox' ? ' is-on' : ''}`} onClick={() => setFilter('inbox')}>
           Inbox
         </button>
-        <button type="button" className={`filter${filter === 'marcadas' ? ' is-on' : ''}`} onClick={() => setFilter('marcadas')}>
-          Marcadas
-        </button>
         <button type="button" className={`filter${filter === 'descartadas' ? ' is-on' : ''}`} onClick={() => setFilter('descartadas')}>
           Descartadas
         </button>
@@ -125,7 +122,7 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
 
       {visible.length === 0 ? (
         <p className="center-note">
-          {filter === 'marcadas' ? 'Nenhuma lead marcada.' : filter === 'descartadas' ? 'Nenhuma lead descartada.' : 'Nenhuma lead na inbox.'}
+          {filter === 'descartadas' ? 'Nenhuma lead descartada.' : 'Nenhuma lead na inbox.'}
         </p>
       ) : (
         <div className="list">
