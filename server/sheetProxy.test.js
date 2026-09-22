@@ -317,3 +317,15 @@ test('the close chart is in the client source that the production bundle builds'
   assert.match(look, /\.evo-line\.ink/);
   assert.match(look, /\.evo-line\.wood/);
 });
+
+test('inbox menu keeps Descartadas and leaves scheduled leads on the dock', () => {
+  const inbox = readFileSync(new URL('../views/Inbox.tsx', import.meta.url), 'utf8');
+  const dock = readFileSync(new URL('../constants.tsx', import.meta.url), 'utf8');
+  assert.match(inbox, />\s*Inbox\s*</);
+  assert.match(inbox, />\s*Descartadas\s*</);
+  assert.doesNotMatch(inbox, /Agendadas/);
+  assert.doesNotMatch(inbox, /Marcadas/);
+  assert.match(dock, /label: 'Inbox'/);
+  assert.match(dock, /label: 'Estatísticas'/);
+  assert.match(dock, /label: 'Marcações'/);
+});
