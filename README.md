@@ -19,7 +19,7 @@ A cor ao lado do nome e as listas vêm da coluna **Legenda** e do prefixo em **O
 | Vermelho, Descartadas | `Descartada` | `[status:discarded]` e `[motivo:…]` obrigatório |
 | Data em que saiu da inbox | **Data fecho** (o script cria a coluna se não existir) | `[fecho:…]` com a mesma data ISO |
 
-A secção **Estatísticas** no Dashboard mostra quantidade e percentagem de todas as leads: total, descartadas, marcadas, em processamento, e cada outro estado que exista. **Evolução temporal** (por dia e por semana) mostra entradas pela Data Contacto, fecho positivo (só marcadas) e fecho total (marcadas + descartadas), em lista e num gráfico de barras (verde = fecho positivo, madeira = fecho total). A percentagem é face às entradas do mesmo período. A data do fecho é **Data fecho**; se uma lead antiga não a tiver, conta pela Data Contacto.
+O separador **Estatísticas** mostra a evolução de marcações e fecho. O gráfico é uma linha (preto = marcações, madeira = fecho) para 7, 30 ou 90 dias em Europe/Lisbon; 90 dias agrupa por semana, à segunda. **Linha** ou **Barras**. Por baixo, três linhas: Marcações, Fecho (marcadas + descartadas) e Descartadas, com quantidade e percentagem face às entradas do período. A data do fecho é **Data fecho**; se uma lead antiga não a tiver, conta pela Data Contacto.
 
 O mapa completo está em [backend-gas/README.md](./backend-gas/README.md).
 

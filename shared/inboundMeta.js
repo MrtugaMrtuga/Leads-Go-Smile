@@ -324,6 +324,87 @@ export function closeEvolution(leads, grain = 'day') {
     }));
 }
 
+function emptyDayCounts() {
+  return { entradas: 0, marcacoes: 0, fecho: 0, descartadas: 0 };
+}
+
+export function closeWindow(leads, spanDays = 30, now = new Date()) {
+  const list = Array.isArray(leads) ? leads : [];
+  const span = spanDays === 7 || spanDays === 90 ? spanDays : 30;
+  const end = lisbonDayKey(now);
+  const start = end ? shiftDay(end, -(span - 1)) : '';
+  const byDay = new Map();
+  const touch = (day) => {
+    if (!byDay.has(day)) byDay.set(day, emptyDayCounts());
+    return byDay.get(day);
+  };
+
+  if (start && end) {
+    list.forEach((lead) => {
+      const entrada = contactDay(lead);
+      if (entrada && entrada >= start && entrada <= end) touch(entrada).entradas += 1;
+      const closed = fechoDay(lead);
+      if (!closed || closed < start || closed > end) return;
+      const row = touch(closed);
+      if (lead.status === 'scheduled') row.marcacoes += 1;
+      if (lead.status === 'discarded') row.descartadas += 1;
+      if (lead.status === 'scheduled' || lead.status === 'discarded') row.fecho += 1;
+    });
+  }
+
+  const points = [];
+  const pushPoint = (key, label, from, to) => {
+    const point = { key, label, ...emptyDayCounts() };
+    if (from && to) {
+      for (let day = from; day <= to; day = shiftDay(day, 1)) {
+        const row = byDay.get(day);
+        if (!row) continue;
+        point.entradas += row.entradas;
+        point.marcacoes += row.marcacoes;
+        point.fecho += row.fecho;
+        point.descartadas += row.descartadas;
+      }
+    }
+    points.push(point);
+  };
+
+  if (start && end && span === 90) {
+    for (let week = weekStartKey(start); week <= end; week = shiftDay(week, 7)) {
+      const from = week < start ? start : week;
+      const to = shiftDay(week, 6) > end ? end : shiftDay(week, 6);
+      pushPoint(from, dayLabel(from).slice(0, 5), from, to);
+    }
+  } else if (start && end) {
+    for (let day = start; day <= end; day = shiftDay(day, 1)) {
+      pushPoint(day, dayLabel(day).slice(0, 5), day, day);
+    }
+  }
+
+  const totals = points.reduce((sum, point) => {
+    sum.entradas += point.entradas;
+    sum.marcacoes += point.marcacoes;
+    sum.fecho += point.fecho;
+    sum.descartadas += point.descartadas;
+    return sum;
+  }, emptyDayCounts());
+
+  return {
+    spanDays: span,
+    timezone: 'Europe/Lisbon',
+    weekStartsOn: 'monday',
+    grain: span === 90 ? 'week' : 'day',
+    start,
+    end,
+    points,
+    totals: {
+      ...totals,
+      marcacoesPct: totals.entradas ? pctOf(totals.marcacoes, totals.entradas) : null,
+      fechoPct: totals.entradas ? pctOf(totals.fecho, totals.entradas) : null,
+      descartadasPct: totals.entradas ? pctOf(totals.descartadas, totals.entradas) : null,
+    },
+  };
+}
+
 const MARKS = new Set(['x', 'sim', 'yes', '1', 'true', '✓', '✔', '✅']);
 
 export function foldHeader(value) {

@@ -186,9 +186,9 @@ const App: React.FC = () => {
       setActiveView={setActiveView}
       title={
         activeView === 'resumo'
-          ? 'Dashboard'
+          ? 'Estatísticas'
           : activeView === 'visitas'
-            ? 'Marcadas'
+            ? 'Marcações'
             : activeView === 'lixo'
               ? 'Descartadas'
               : activeView === 'contas'

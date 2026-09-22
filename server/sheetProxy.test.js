@@ -293,14 +293,27 @@ test('apps script is bound to Inbound META and the client bundle has no secret',
 
 test('the close chart is in the client source that the production bundle builds', () => {
   const dashboard = readFileSync(new URL('../views/Dashboard.tsx', import.meta.url), 'utf8');
+  const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
+  const dock = readFileSync(new URL('../constants.tsx', import.meta.url), 'utf8');
   const bundledCss = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
   const look = readFileSync(new URL('../public/look.css', import.meta.url), 'utf8');
-  assert.match(dashboard, /Fecho positivo/);
-  assert.match(dashboard, /Fecho total/);
-  assert.match(dashboard, /chart-bar positivo/);
-  assert.match(dashboard, /chart-bar total/);
-  assert.match(bundledCss, /\.chart-bar\.positivo/);
-  assert.match(bundledCss, /\.chart-bar\.total/);
-  assert.match(look, /\.chart-bar\.positivo/);
-  assert.match(look, /\.chart-bar\.total/);
+  assert.match(dashboard, /\[7, 30, 90\]/);
+  assert.match(dashboard, /\{days\} dias/);
+  assert.match(dashboard, /Linha/);
+  assert.match(dashboard, /Barras/);
+  assert.match(dashboard, /mode === 'line'/);
+  assert.match(dashboard, /Marcações/);
+  assert.match(dashboard, /Fecho/);
+  assert.match(dashboard, /evo-line wood/);
+  assert.match(dashboard, /evo-line ink/);
+  assert.match(app, /Estatísticas/);
+  assert.match(dock, /Inbox/);
+  assert.match(dock, /Estatísticas/);
+  assert.match(dock, /Marcações/);
+  assert.match(bundledCss, /\.evo-line\.ink/);
+  assert.match(bundledCss, /stroke: var\(--wood\)/);
+  assert.match(bundledCss, /#000000|#000|var\(--ink\)/);
+  assert.doesNotMatch(bundledCss, /fill:\s*url\(/);
+  assert.match(look, /\.evo-line\.ink/);
+  assert.match(look, /\.evo-line\.wood/);
 });

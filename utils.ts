@@ -2,6 +2,7 @@
 import { Lead, LeadFormField } from './types';
 import {
   closeEvolution as closeEvolutionJs,
+  closeWindow as closeWindowJs,
   filledLeadFields as filledLeadFieldsJs,
   humanizeMetaValue as humanizeMetaValueJs,
   listBucket as listBucketJs,
@@ -48,6 +49,34 @@ export function pipelineBreakdown(leads: Lead[]) {
   return pipelineBreakdownJs(leads) as {
     total: number;
     buckets: { key: string; label: string; count: number; pct: number }[];
+  };
+}
+
+export function closeWindow(leads: Lead[], spanDays: 7 | 30 | 90, now = new Date()) {
+  return closeWindowJs(leads, spanDays, now) as {
+    spanDays: number;
+    timezone: string;
+    weekStartsOn: string;
+    grain: 'day' | 'week';
+    start: string;
+    end: string;
+    points: {
+      key: string;
+      label: string;
+      entradas: number;
+      marcacoes: number;
+      fecho: number;
+      descartadas: number;
+    }[];
+    totals: {
+      entradas: number;
+      marcacoes: number;
+      fecho: number;
+      descartadas: number;
+      marcacoesPct: number | null;
+      fechoPct: number | null;
+      descartadasPct: number | null;
+    };
   };
 }
 

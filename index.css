@@ -155,7 +155,7 @@ button {
   color: #000;
   max-width: 430px;
   margin: 0 auto;
-  padding: 20px 20px 88px;
+  padding: 20px 22px 88px;
   position: relative;
 }
 
@@ -520,6 +520,7 @@ h1.page-title {
   color: var(--mute);
   font-size: 13px;
   font-weight: 400;
+  white-space: nowrap;
 }
 
 .dock-item.is-on {
@@ -662,76 +663,111 @@ textarea.field:focus {
   scrollbar-width: none;
 }
 
-.chart {
-  margin: 4px 0 8px;
-}
-
-.chart-legend {
+.period {
   display: flex;
-  flex-wrap: wrap;
-  gap: 8px 16px;
-  margin: 0 0 8px;
-  font-size: 12px;
+  align-items: baseline;
+  gap: 0;
+  margin: 0 0 18px;
+}
+
+.period .filter {
+  margin-right: 0;
+}
+
+.period-dot {
+  margin: 0 10px;
   color: var(--mute);
+  font-size: 15px;
 }
 
-.chart-key {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.chart-swatch {
-  width: 14px;
-  height: 6px;
-  background: var(--dot-green);
-}
-
-.chart-swatch.total {
-  background: var(--wood);
-}
-
-.chart-block {
-  padding: 8px 0 6px;
-  border-top: 1px solid var(--line);
-}
-
-.chart .chart-block:last-child {
-  border-bottom: 1px solid var(--line);
-}
-
-.chart-head {
+.evo-top {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
-  margin-bottom: 6px;
+  margin: 18px 0 8px;
+}
+
+.evo-legend {
+  display: flex;
+  gap: 16px;
+  margin: 0;
   font-size: 13px;
-  font-variant-numeric: tabular-nums;
-  color: #000;
+  color: var(--ink);
 }
 
-.chart-count {
-  color: var(--mute);
-  white-space: nowrap;
+.evo-mark {
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  margin-right: 6px;
+  border-top: 2.5px solid var(--ink);
+  vertical-align: middle;
 }
 
-.chart-track {
-  height: 6px;
-  margin-top: 4px;
-  border-bottom: 1px solid var(--line);
+.evo-mark.wood {
+  border-top-color: var(--wood);
 }
 
-.chart-bar {
+.evo-mode {
+  margin: 0;
+  gap: 16px;
+  flex-shrink: 0;
+}
+
+.evo-svg {
   display: block;
-  height: 6px;
-  max-width: 100%;
+  width: 100%;
+  height: auto;
+  margin: 4px 0 8px;
 }
 
-.chart-bar.positivo {
-  background: var(--dot-green);
+.evo-base {
+  stroke: var(--line);
+  stroke-width: 1;
 }
 
-.chart-bar.total {
-  background: var(--wood);
+.evo-line {
+  fill: none;
+  stroke-width: 2.5;
+  stroke-linecap: butt;
+  stroke-linejoin: miter;
+}
+
+.evo-line.ink {
+  stroke: var(--ink);
+}
+
+.evo-line.wood {
+  stroke: var(--wood);
+}
+
+.evo-dot {
+  stroke: none;
+}
+
+.evo-dot.ink,
+.evo-col.ink {
+  fill: var(--ink);
+}
+
+.evo-dot.wood,
+.evo-col.wood {
+  fill: var(--wood);
+}
+
+.evo-col {
+  stroke: none;
+}
+
+.evo-label {
+  fill: var(--mute);
+  font-family: var(--font);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.evo-kpis {
+  margin-top: 8px;
 }
