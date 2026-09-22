@@ -1,10 +1,13 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { fetchStats } from '../api';
+import React, { useState } from 'react';
 import { Lead } from '../types';
-import { buildLeadStats, ClosePeriod, LeadStats } from '../utils';
+import { closeEvolution, pipelineBreakdown } from '../utils';
+
+type ClosePeriod = ReturnType<typeof closeEvolution>[number];
 
 interface DashboardProps {
+  leads: Lead[];
   allLeads: Lead[];
+  monthLabel: string;
 }
 
 function formatPct(value: number | null) {
@@ -64,39 +67,48 @@ const CloseChart: React.FC<{ periods: ClosePeriod[]; grain: 'day' | 'week' }> = 
   );
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ allLeads }) => {
+const Dashboard: React.FC<DashboardProps> = ({ leads, allLeads, monthLabel }) => {
+  const total = leads.length;
+  const novos = leads.filter((l) => l.status === 'new').length;
+  const contactos = leads.filter((l) => l.status === 'contacted' || l.status === 'processing').length;
+  const marcados = leads.filter((l) => l.status === 'scheduled').length;
+  const perdidos = leads.filter((l) => l.status === 'discarded').length;
+  const [metric, setMetric] = useState<'novos' | 'contactos' | 'marcados' | 'perdidos'>('novos');
   const [grain, setGrain] = useState<'day' | 'week'>('day');
-  const [remote, setRemote] = useState<LeadStats | null>(null);
-  const local = useMemo(() => buildLeadStats(allLeads), [allLeads]);
+  const stats = pipelineBreakdown(allLeads);
+  const evolution = closeEvolution(allLeads, grain);
 
-  useEffect(() => {
-    let cancel = false;
-    setRemote(null);
-    fetchStats()
-      .then((data) => {
-        if (!cancel) setRemote(data);
-      })
-      .catch(() => {
-        /* the same aggregators already ran on the leads in memory */
-      });
-    return () => {
-      cancel = true;
-    };
-  }, [allLeads]);
-
-  const stats = remote ?? local;
-  const evolution = grain === 'week' ? stats.week : stats.day;
-
-  const byOrigin = allLeads.reduce<Record<string, number>>((acc, lead) => {
+  const byOrigin = leads.reduce<Record<string, number>>((acc, lead) => {
     const key = lead.source || 'Local';
     acc[key] = (acc[key] || 0) + 1;
     return acc;
   }, {});
 
+  const circles = [
+    { id: 'novos' as const, value: novos, label: 'Novos' },
+    { id: 'contactos' as const, value: contactos, label: 'Contactos' },
+    { id: 'marcados' as const, value: marcados, label: 'Marcados' },
+    { id: 'perdidos' as const, value: perdidos, label: 'Perdidos' },
+  ];
+
   return (
     <div>
-      <p className="hero-num">{stats.total}</p>
-      <p className="hero-foot">leads · todas</p>
+      <p className="hero-num">{total}</p>
+      <p className="hero-foot">leads · {monthLabel.toLowerCase()}</p>
+
+      <div className="circles">
+        {circles.map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            className={`circle-btn${metric === item.id ? ' is-on' : ''}`}
+            onClick={() => setMetric(item.id)}
+          >
+            <span className="circle">{item.value}</span>
+            <span className="circle-label">{item.label}</span>
+          </button>
+        ))}
+      </div>
 
       <h2 className="section-label">Estatísticas</h2>
       <p className="sub">Quantidade e percentagem de todas as leads.</p>
@@ -116,9 +128,7 @@ const Dashboard: React.FC<DashboardProps> = ({ allLeads }) => {
 
       <h2 className="section-label">Evolução temporal</h2>
       <p className="sub">Fecho positivo: só marcadas. Fecho total: marcadas + descartadas.</p>
-      <p className="sub">
-        A percentagem é face às entradas do mesmo dia ou semana (Data Contacto, Europe/Lisbon). A semana começa à segunda. A data do fecho é Data fecho.
-      </p>
+      <p className="sub">A percentagem é face às entradas do mesmo dia ou semana (Data Contacto). A data do fecho é Data fecho.</p>
       <div className="filters">
         <button type="button" className={`filter${grain === 'day' ? ' is-on' : ''}`} onClick={() => setGrain('day')}>
           Por dia
@@ -172,7 +182,7 @@ const Dashboard: React.FC<DashboardProps> = ({ allLeads }) => {
       <h2 className="section-label">Por origem</h2>
       <div className="list">
         {Object.keys(byOrigin).length === 0 ? (
-          <p className="center-note">Sem leads.</p>
+          <p className="center-note">Sem leads neste mês.</p>
         ) : (
           Object.entries(byOrigin)
             .sort((a, b) => b[1] - a[1])
@@ -182,6 +192,7 @@ const Dashboard: React.FC<DashboardProps> = ({ allLeads }) => {
                   <span className="row-title">{origin}</span>
                 </span>
                 <span className="row-value">{count}</span>
+                <span className="chevron">›</span>
               </div>
             ))
         )}

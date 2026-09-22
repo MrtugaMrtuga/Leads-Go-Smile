@@ -1,7 +1,6 @@
 
 import { Lead, LeadFormField } from './types';
 import {
-  buildLeadStats as buildLeadStatsJs,
   closeEvolution as closeEvolutionJs,
   filledLeadFields as filledLeadFieldsJs,
   humanizeMetaValue as humanizeMetaValueJs,
@@ -52,33 +51,16 @@ export function pipelineBreakdown(leads: Lead[]) {
   };
 }
 
-export interface ClosePeriod {
-  key: string;
-  label: string;
-  entradas: number;
-  positivo: number;
-  totalFecho: number;
-  positivoPct: number | null;
-  totalPct: number | null;
-}
-
-export interface LeadStats {
-  sheetId: string;
-  sheetTab: string;
-  timezone: string;
-  weekStartsOn: string;
-  total: number;
-  buckets: { key: string; label: string; count: number; pct: number }[];
-  day: ClosePeriod[];
-  week: ClosePeriod[];
-}
-
 export function closeEvolution(leads: Lead[], grain: 'day' | 'week') {
-  return closeEvolutionJs(leads, grain) as ClosePeriod[];
-}
-
-export function buildLeadStats(leads: Lead[]) {
-  return buildLeadStatsJs(leads) as LeadStats;
+  return closeEvolutionJs(leads, grain) as {
+    key: string;
+    label: string;
+    entradas: number;
+    positivo: number;
+    totalFecho: number;
+    positivoPct: number | null;
+    totalPct: number | null;
+  }[];
 }
 
 export const formatMonthYear = (date: Date): string => {

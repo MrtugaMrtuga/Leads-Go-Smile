@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
-  buildLeadStats,
   closeEvolution,
   filledLeadFields,
   humanizeMetaValue,
@@ -11,7 +10,6 @@ import {
   pipelineBreakdown,
   pipelineStats,
   pipelineTone,
-  SHEET_ID,
 } from './inboundMeta.js';
 
 const HEADERS = [
@@ -267,22 +265,6 @@ test('estatísticas are percentages of every lead', () => {
   assert.equal(byLabel.Contactadas, undefined);
   assert.equal(listBucket('processing'), 'inbox');
   assert.equal(listBucket('scheduled') === 'inbox', false);
-});
-
-test('buildLeadStats points at the live sheet and both grains', () => {
-  const stats = buildLeadStats([
-    { status: 'scheduled', timestamp: '2026-09-21T10:00:00.000Z', closedAt: '2026-09-21T18:00:00.000Z' },
-    { status: 'new', timestamp: '2026-09-21T12:00:00.000Z' },
-  ]);
-  assert.equal(SHEET_ID, '1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8');
-  assert.equal(stats.sheetId, SHEET_ID);
-  assert.equal(stats.sheetTab, 'Inbound META');
-  assert.equal(stats.total, 2);
-  assert.equal(stats.buckets.find((row) => row.label === 'Marcadas').pct, 50);
-  assert.equal(stats.day[0].key, '2026-09-21');
-  assert.equal(stats.day[0].positivo, 1);
-  assert.equal(stats.weekStartsOn, 'monday');
-  assert.equal(stats.week[0].positivo, 1);
 });
 
 test('fecho date is read from the column or the Observações marker', () => {

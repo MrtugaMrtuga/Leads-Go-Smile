@@ -3,7 +3,7 @@
  * Values stay raw here; the UI humanizes snake_case for display.
  */
 
-export const SHEET_ID = '1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8';
+export const SHEET_ID = '1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w';
 export const SHEET_TAB = 'Inbound META';
 
 export const COLUMN_DEFS = [
@@ -246,20 +246,6 @@ export function pipelineStats(leads) {
     bookedPct: bucket('booked').pct,
     processingPct: bucket('processing').pct,
     buckets: breakdown.buckets,
-  };
-}
-
-export function buildLeadStats(leads) {
-  const breakdown = pipelineBreakdown(leads);
-  return {
-    sheetId: SHEET_ID,
-    sheetTab: SHEET_TAB,
-    timezone: 'Europe/Lisbon',
-    weekStartsOn: 'monday',
-    total: breakdown.total,
-    buckets: breakdown.buckets,
-    day: closeEvolution(leads, 'day'),
-    week: closeEvolution(leads, 'week'),
   };
 }
 

@@ -121,7 +121,7 @@ const App: React.FC = () => {
   const renderView = () => {
     switch (activeView) {
       case 'resumo':
-        return <Dashboard allLeads={leads} />;
+        return <Dashboard leads={currentLeads} allLeads={leads} monthLabel={monthLabel} />;
       case 'inbox':
         return (
           <Inbox
@@ -176,7 +176,7 @@ const App: React.FC = () => {
           />
         );
       default:
-        return <Dashboard allLeads={leads} />;
+        return <Dashboard leads={currentLeads} monthLabel={monthLabel} />;
     }
   };
 
@@ -186,7 +186,7 @@ const App: React.FC = () => {
       setActiveView={setActiveView}
       title={
         activeView === 'resumo'
-          ? 'Estatísticas'
+          ? 'Dashboard'
           : activeView === 'visitas'
             ? 'Marcadas'
             : activeView === 'lixo'
