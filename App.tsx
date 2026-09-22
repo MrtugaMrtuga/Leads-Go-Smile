@@ -7,7 +7,7 @@ import Agenda from './views/Agenda';
 import Accounts from './views/Accounts';
 import Admin from './views/Admin';
 import { AppView, Lead, AdminSettings, LeadUpdatePayload } from './types';
-import { formatMonthYear, getLeadsByMonth, mapDataToLeads } from './utils';
+import { formatMonthYear, getLeadsByMonth, mapDataToLeads, sortLeadsNewestFirst } from './utils';
 import { createLead, fetchHealth, fetchLeads, fetchSettings, saveSettings, sendReminder, updateLead } from './api';
 
 const App: React.FC = () => {
@@ -24,7 +24,7 @@ const App: React.FC = () => {
     setFetchError(null);
     try {
       const [nextLeads, nextSettings, health] = await Promise.all([fetchLeads(), fetchSettings(), fetchHealth()]);
-      setLeads(mapDataToLeads(nextLeads));
+      setLeads(sortLeadsNewestFirst(mapDataToLeads(nextLeads)));
       setSettings(nextSettings);
       if (health.configured === false) {
         setFetchError('Defina APPS_SCRIPT_URL e APPS_SCRIPT_SECRET no Mini');
@@ -75,7 +75,7 @@ const App: React.FC = () => {
     setIsSyncing(true);
     try {
       const lead = await createLead({ ...input, status: 'new', source: 'Manual' });
-      setLeads((prev) => [lead, ...prev.filter((item) => item.id !== lead.id)]);
+      setLeads((prev) => sortLeadsNewestFirst([lead, ...prev.filter((item) => item.id !== lead.id)]));
     } catch (error) {
       console.error(error);
       setFetchError('Erro ao criar lead');
@@ -186,9 +186,9 @@ const App: React.FC = () => {
       setActiveView={setActiveView}
       title={
         activeView === 'resumo'
-          ? 'Dashboard'
+          ? 'Estatísticas'
           : activeView === 'visitas'
-            ? 'Marcadas'
+            ? 'Marcações'
             : activeView === 'lixo'
               ? 'Descartadas'
               : activeView === 'contas'

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import LeadName from '../components/LeadName';
 import { Lead } from '../types';
-import { formatCurrency } from '../utils';
+import { formatCurrency, sortLeadsNewestFirst } from '../utils';
 
 interface AgendaProps {
   leads: Lead[];
@@ -29,7 +29,7 @@ const Agenda: React.FC<AgendaProps> = ({ leads, onUpdateStatus, onSendReminder, 
         <p className="center-note">Nenhuma lead marcada em {monthLabel.toLowerCase()}.</p>
       ) : (
         <div>
-          {leads.map((lead) => (
+          {sortLeadsNewestFirst(leads).map((lead) => (
             <button key={lead.id} type="button" className="day-line" onClick={() => { setSelected(lead); setBudget(''); }}>
               <span className="day-line-when">{formatWhen(lead.appointmentDate)}</span>
               <span>

@@ -2,6 +2,7 @@
 import { Lead, LeadFormField } from './types';
 import {
   closeEvolution as closeEvolutionJs,
+  closeWindow as closeWindowJs,
   filledLeadFields as filledLeadFieldsJs,
   humanizeMetaValue as humanizeMetaValueJs,
   listBucket as listBucketJs,
@@ -9,6 +10,7 @@ import {
   pipelineBreakdown as pipelineBreakdownJs,
   pipelineStats as pipelineStatsJs,
   pipelineTone as pipelineToneJs,
+  sortLeadsNewestFirst as sortLeadsNewestFirstJs,
 } from './shared/inboundMeta.js';
 
 export function humanizeMetaValue(value: unknown): string {
@@ -17,6 +19,10 @@ export function humanizeMetaValue(value: unknown): string {
 
 export function mapDataToLeads(data: unknown[]): Lead[] {
   return mapDataToLeadsJs(data) as Lead[];
+}
+
+export function sortLeadsNewestFirst<T extends { timestamp?: string; dataContacto?: string; id?: string; row?: number | null }>(leads: T[]): T[] {
+  return sortLeadsNewestFirstJs(leads) as T[];
 }
 
 export function filledLeadFields(lead: Lead): LeadFormField[] {
@@ -51,6 +57,34 @@ export function pipelineBreakdown(leads: Lead[]) {
   };
 }
 
+export function closeWindow(leads: Lead[], spanDays: 7 | 30 | 90, now = new Date()) {
+  return closeWindowJs(leads, spanDays, now) as {
+    spanDays: number;
+    timezone: string;
+    weekStartsOn: string;
+    grain: 'day' | 'week';
+    start: string;
+    end: string;
+    points: {
+      key: string;
+      label: string;
+      entradas: number;
+      marcacoes: number;
+      fecho: number;
+      descartadas: number;
+    }[];
+    totals: {
+      entradas: number;
+      marcacoes: number;
+      fecho: number;
+      descartadas: number;
+      marcacoesPct: number | null;
+      fechoPct: number | null;
+      descartadasPct: number | null;
+    };
+  };
+}
+
 export function closeEvolution(leads: Lead[], grain: 'day' | 'week') {
   return closeEvolutionJs(leads, grain) as {
     key: string;
@@ -72,17 +106,13 @@ export const formatMonthYear = (date: Date): string => {
 };
 
 export const getLeadsByMonth = (leads: Lead[], month: number, year: number): Lead[] => {
-  return leads
-    .filter(lead => {
+  return sortLeadsNewestFirst(
+    leads.filter((lead) => {
       const d = new Date(lead.timestamp);
       if (isNaN(d.getTime())) return false;
-      // Usamos getMonth e getFullYear que respeitam a hora local definida no parsing
       return d.getMonth() === month && d.getFullYear() === year;
     })
-    .sort((a, b) => {
-      // Ordenação decrescente: o timestamp maior (mais recente) vem primeiro
-      return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
-    });
+  );
 };
 
 export const formatCurrency = (value: number): string => {

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   closeEvolution,
+  closeWindow,
   filledLeadFields,
   humanizeMetaValue,
   listBucket,
@@ -10,6 +11,7 @@ import {
   pipelineBreakdown,
   pipelineStats,
   pipelineTone,
+  sortLeadsNewestFirst,
 } from './inboundMeta.js';
 
 const HEADERS = [
@@ -310,6 +312,56 @@ test('close rate by day and week uses Data Contacto and Data fecho', () => {
   assert.equal(thisWeek.totalPct, 50);
   assert.equal(prevWeek.positivo, 1);
   assert.match(thisWeek.label, /21\/09\/2026 a 27\/09\/2026/);
+});
+
+test('close window is a Lisbon range of 7, 30, or 90 days', () => {
+  const leads = [
+    { status: 'scheduled', timestamp: '2026-09-21T10:00:00.000Z', closedAt: '2026-09-21T18:00:00.000Z' },
+    { status: 'discarded', timestamp: '2026-09-21T11:00:00.000Z', closedAt: '2026-09-22T11:00:00.000Z' },
+    { status: 'new', timestamp: '2026-09-21T12:00:00.000Z' },
+    { status: 'processing', timestamp: '2026-09-21T13:00:00.000Z' },
+    { status: 'scheduled', timestamp: '2026-09-14T10:00:00.000Z', closedAt: '2026-09-14T10:00:00.000Z' },
+  ];
+  const now = new Date('2026-09-22T12:00:00.000Z');
+  const week = closeWindow(leads, 7, now);
+  assert.equal(week.timezone, 'Europe/Lisbon');
+  assert.equal(week.grain, 'day');
+  assert.equal(week.points.length, 7);
+  assert.equal(week.points[0].key, '2026-09-16');
+  assert.equal(week.points.at(-1).key, '2026-09-22');
+  const monday = week.points.find((point) => point.key === '2026-09-21');
+  const tuesday = week.points.find((point) => point.key === '2026-09-22');
+  assert.equal(monday.marcacoes, 1);
+  assert.equal(monday.fecho, 1);
+  assert.equal(tuesday.fecho, 1);
+  assert.equal(tuesday.descartadas, 1);
+  assert.equal(week.totals.marcacoes, 1);
+  assert.equal(week.totals.fecho, 2);
+  assert.equal(week.totals.entradas, 4);
+  assert.equal(week.totals.marcacoesPct, 25);
+  assert.equal(week.totals.fechoPct, 50);
+  assert.equal(week.points.some((point) => point.key === '2026-09-14'), false);
+
+  const quarter = closeWindow(leads, 90, now);
+  assert.equal(quarter.grain, 'week');
+  assert.equal(quarter.weekStartsOn, 'monday');
+  assert.ok(quarter.points.length < 20);
+  assert.equal(quarter.totals.marcacoes, 2);
+  assert.equal(quarter.points[0].key <= '2026-09-14', true);
+});
+
+test('lead lists put the newest Data Contacto first', () => {
+  const sorted = sortLeadsNewestFirst([
+    { id: '2', timestamp: '2026-09-20T10:00:00.000Z', name: 'Antiga' },
+    { id: '4', dataContacto: '2026-09-21T10:00:00.000Z', name: 'Mesmo instante, linha menor' },
+    { id: '9', timestamp: '2026-09-21T10:00:00.000Z', name: 'Mais recente' },
+    { id: '3', timestamp: '2026-09-21T09:00:00.000Z', name: 'Mais cedo no dia' },
+    { id: '1', timestamp: '', name: 'Sem data' },
+  ]);
+  assert.deepEqual(
+    sorted.map((lead) => lead.name),
+    ['Mais recente', 'Mesmo instante, linha menor', 'Mais cedo no dia', 'Antiga', 'Sem data']
+  );
 });
 
 test('portuguese sheet dates stay on the contact day', () => {

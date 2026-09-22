@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import LeadName from '../components/LeadName';
 import { Lead } from '../types';
-import { filledLeadFields, listBucket } from '../utils';
+import { filledLeadFields, listBucket, sortLeadsNewestFirst } from '../utils';
 
 interface InboxProps {
   leads: Lead[];
@@ -25,7 +25,10 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
   const [selectedDoctor, setSelectedDoctor] = useState('');
   const [isOrto, setIsOrto] = useState(false);
 
-  const visible = useMemo(() => leads.filter((lead) => listBucket(lead.status) === filter), [leads, filter]);
+  const visible = useMemo(
+    () => sortLeadsNewestFirst(leads.filter((lead) => listBucket(lead.status) === filter)),
+    [leads, filter]
+  );
 
   const statusLabel = (status: Lead['status']) => {
     if (status === 'new') return 'Novo';

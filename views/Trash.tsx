@@ -1,6 +1,7 @@
 import React from 'react';
 import LeadName from '../components/LeadName';
 import { Lead } from '../types';
+import { sortLeadsNewestFirst } from '../utils';
 
 interface TrashProps {
   leads: Lead[];
@@ -17,7 +18,7 @@ const Trash: React.FC<TrashProps> = ({ leads, onUpdateStatus, monthLabel, isSync
         <p className="center-note">Nenhuma lead descartada em {monthLabel.toLowerCase()}.</p>
       ) : (
         <div className="list">
-          {leads.map((lead) => (
+          {sortLeadsNewestFirst(leads).map((lead) => (
             <div key={lead.id} className="row">
               <span className="row-main">
                 <LeadName lead={lead} className="row-title" />
