@@ -7,11 +7,13 @@ import {
   humanizeMetaValue as humanizeMetaValueJs,
   listBucket as listBucketJs,
   mapDataToLeads as mapDataToLeadsJs,
+  nextPipelineStatus as nextPipelineStatusJs,
   pipelineBreakdown as pipelineBreakdownJs,
   pipelineStats as pipelineStatsJs,
   pipelineTone as pipelineToneJs,
   sortLeadsNewestFirst as sortLeadsNewestFirstJs,
 } from './shared/inboundMeta.js';
+import { formatPhoneDisplay as formatPhoneDisplayJs, toE164 as toE164Js, toTelHref as toTelHrefJs } from './shared/phone.js';
 
 export function humanizeMetaValue(value: unknown): string {
   return humanizeMetaValueJs(value);
@@ -31,6 +33,22 @@ export function filledLeadFields(lead: Lead): LeadFormField[] {
 
 export function listBucket(status: Lead['status']) {
   return listBucketJs(status) as 'inbox' | 'marcadas' | 'descartadas' | 'other';
+}
+
+export function nextPipelineStatus(status: Lead['status']) {
+  return nextPipelineStatusJs(status) as '' | 'processing' | 'scheduled';
+}
+
+export function toE164(phone: string) {
+  return toE164Js(phone) as string;
+}
+
+export function toTelHref(phone: string) {
+  return toTelHrefJs(phone) as string;
+}
+
+export function formatPhoneDisplay(phone: string) {
+  return formatPhoneDisplayJs(phone) as string;
 }
 
 export function pipelineTone(status: Lead['status']) {

@@ -91,6 +91,8 @@ Na primeira vez que uma lead passa a marcada ou descartada, o script acrescenta 
 
 «Não atendeu» grava `[status:processing]`, Legenda `Em processamento` e 1º Contacto. A lead continua na inbox. Descartar sem motivo é recusado (`Motivo é obrigatório para descartar`) e a linha não muda.
 
+O toque **Marcada ↔ Em processamento** usa o mesmo `action: "update"`. Não cria colunas e não envia mensagem. `status: "scheduled"` grava Legenda `Marcada`, `[status:scheduled]` e **Data fecho** se ainda estiver vazia. `status: "processing"` grava Legenda `Em processamento`, `[status:processing]` e apaga **Data fecho**. A nota que já estava em Observações mantém-se (`noteSet` falso). Médico e data da consulta só mudam quando o pedido os traz (o fluxo Agendar).
+
 Depois de colar este `Code.gs`: **Implementar → Gerir implementações → lápis → Nova versão**. O URL `/exec` mantém-se. Sem essa versão nova, o prefixo `processing` e o `[motivo:…]` não ficam gravados.
 
 `Observações` (primeira) guarda a nota e, quando há estado da app, o prefixo `[status:…]`, que a UI não mostra. O motivo, quando existe, fica na linha seguinte.

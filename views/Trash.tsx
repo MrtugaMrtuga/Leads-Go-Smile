@@ -1,5 +1,5 @@
 import React from 'react';
-import LeadName from '../components/LeadName';
+import LeadRowMain from '../components/LeadRowMain';
 import { Lead } from '../types';
 import { sortLeadsNewestFirst } from '../utils';
 
@@ -20,10 +20,7 @@ const Trash: React.FC<TrashProps> = ({ leads, onUpdateStatus, monthLabel, isSync
         <div className="list">
           {sortLeadsNewestFirst(leads).map((lead) => (
             <div key={lead.id} className="row">
-              <span className="row-main">
-                <LeadName lead={lead} className="row-title" />
-                <span className="row-sub">{lead.discardReason || lead.notes || 'Sem motivo'}</span>
-              </span>
+              <LeadRowMain lead={lead} sub={lead.discardReason || lead.notes || 'Sem motivo'} />
               <button
                 type="button"
                 disabled={isSyncing}

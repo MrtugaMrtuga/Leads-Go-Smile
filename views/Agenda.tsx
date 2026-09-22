@@ -1,5 +1,8 @@
 import React, { useState } from 'react';
 import LeadName from '../components/LeadName';
+import LeadPhone from '../components/LeadPhone';
+import LeadRowMain from '../components/LeadRowMain';
+import StatusMove from '../components/StatusMove';
 import { Lead } from '../types';
 import { formatCurrency, sortLeadsNewestFirst } from '../utils';
 
@@ -23,6 +26,11 @@ const Agenda: React.FC<AgendaProps> = ({ leads, onUpdateStatus, onSendReminder, 
     return d.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit' });
   };
 
+  const moveStatus = (lead: Lead, next: 'processing' | 'scheduled') => {
+    onUpdateStatus(lead.id, { status: next, isContacted: true }, { status: next });
+    setSelected((current) => (current && current.id === lead.id ? { ...current, status: next, isContacted: true } : current));
+  };
+
   return (
     <div>
       {leads.length === 0 ? (
@@ -30,14 +38,19 @@ const Agenda: React.FC<AgendaProps> = ({ leads, onUpdateStatus, onSendReminder, 
       ) : (
         <div>
           {sortLeadsNewestFirst(leads).map((lead) => (
-            <button key={lead.id} type="button" className="day-line" onClick={() => { setSelected(lead); setBudget(''); }}>
-              <span className="day-line-when">{formatWhen(lead.appointmentDate)}</span>
-              <span>
-                <LeadName lead={lead} className="day-line-act" />
-                <span className="day-line-sub">{lead.doctor || 'Médico a definir'}</span>
-              </span>
-              <span className="chevron">›</span>
-            </button>
+            <div key={lead.id} className="day-line">
+              <button type="button" className="day-line-when row-hit" onClick={() => { setSelected(lead); setBudget(''); }}>
+                {formatWhen(lead.appointmentDate)}
+              </button>
+              <LeadRowMain
+                lead={lead}
+                nameClassName="day-line-act"
+                mark={<span className="chevron">›</span>}
+                onOpen={() => { setSelected(lead); setBudget(''); }}
+                sub={lead.doctor || 'Médico a definir'}
+              />
+              <StatusMove status={lead.status} disabled={isSyncing} onMove={(next) => moveStatus(lead, next)} />
+            </div>
           ))}
         </div>
       )}
@@ -51,9 +64,17 @@ const Agenda: React.FC<AgendaProps> = ({ leads, onUpdateStatus, onSendReminder, 
             <h1 className="page-title">
               <LeadName lead={selected} className="name-line" />
             </h1>
+            <LeadPhone phone={selected.phone} className="detail-phone" />
             <p className="sub">
               {selected.appointmentDate || 'Data a definir'} · {selected.doctor || 'Sem médico'}
             </p>
+            <StatusMove
+              status={selected.status}
+              disabled={isSyncing}
+              className="cta sec"
+              phrase
+              onMove={(next) => moveStatus(selected, next)}
+            />
             {selected.notes && <p className="sub">{selected.notes}</p>}
             <button
               type="button"

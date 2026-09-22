@@ -1,7 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import LeadName from '../components/LeadName';
+import LeadPhone from '../components/LeadPhone';
+import LeadRowMain from '../components/LeadRowMain';
+import StatusMove from '../components/StatusMove';
 import { Lead } from '../types';
-import { filledLeadFields, listBucket, sortLeadsNewestFirst } from '../utils';
+import { filledLeadFields, listBucket, nextPipelineStatus, sortLeadsNewestFirst } from '../utils';
 
 interface InboxProps {
   leads: Lead[];
@@ -95,6 +98,11 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
     close();
   };
 
+  const moveStatus = (lead: Lead, next: 'processing' | 'scheduled') => {
+    onUpdateStatus(lead.id, { status: next, isContacted: true }, { status: next });
+    setSelectedLead((current) => (current && current.id === lead.id ? { ...current, status: next, isContacted: true } : current));
+  };
+
   return (
     <div>
       <div className="filters">
@@ -121,19 +129,28 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
         </p>
       ) : (
         <div className="list">
-          {visible.map((lead) => (
-            <button key={lead.id} type="button" className="row" onClick={() => open('comment', lead)}>
-              <span className="row-main">
-                <LeadName lead={lead} className="row-title" />
-                <span className="row-sub">
-                  {lead.status === 'discarded' && lead.discardReason
-                    ? lead.discardReason
-                    : `${lead.source || 'Local'} · ${timeAgo(lead.timestamp)}`}
+          {visible.map((lead) => {
+            const next = nextPipelineStatus(lead.status);
+            return (
+              <div key={lead.id} className="row">
+                <LeadRowMain
+                  lead={lead}
+                  onOpen={() => open('comment', lead)}
+                  sub={
+                    lead.status === 'discarded' && lead.discardReason
+                      ? lead.discardReason
+                      : `${lead.source || 'Local'} · ${timeAgo(lead.timestamp)}`
+                  }
+                />
+                <span className="row-side">
+                  <span className="row-status">{statusLabel(lead.status)}</span>
+                  {next ? (
+                    <StatusMove status={lead.status} disabled={isSyncing} onMove={(target) => moveStatus(lead, target)} />
+                  ) : null}
                 </span>
-              </span>
-              <span className="row-status">{statusLabel(lead.status)}</span>
-            </button>
-          ))}
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -146,12 +163,20 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
             <h1 className="page-title">
               <LeadName lead={selectedLead} className="name-line" />
             </h1>
-            <p className="sub">{selectedLead.email || selectedLead.phone}</p>
+            <LeadPhone phone={selectedLead.phone} className="detail-phone" />
+            {selectedLead.email ? <p className="sub">{selectedLead.email}</p> : null}
             {selectedLead.discardReason ? <p className="sub">Motivo: {selectedLead.discardReason}</p> : null}
             <LeadFormFields lead={selectedLead} />
 
             {activeModal === 'comment' && (
               <>
+                <StatusMove
+                  status={selectedLead.status}
+                  disabled={isSyncing}
+                  className="cta sec"
+                  phrase
+                  onMove={(next) => moveStatus(selectedLead, next)}
+                />
                 <label className="field">
                   Nota
                   <textarea className="field" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="O que foi acordado?" />

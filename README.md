@@ -19,7 +19,20 @@ A cor ao lado do nome e as listas vêm da coluna **Legenda** e do prefixo em **O
 | Vermelho, Descartadas | `Descartada` | `[status:discarded]` e `[motivo:…]` obrigatório |
 | Data em que saiu da inbox | **Data fecho** (o script cria a coluna se não existir) | `[fecho:…]` com a mesma data ISO |
 
-Em cada lista (Inbox, Marcadas, Descartadas e as outras) a lead com a Data Contacto mais recente fica na primeira linha.
+Em cada lista (Inbox, Marcadas, Descartadas e as outras) a lead com a Data Contacto mais recente fica na primeira linha. Cada linha mostra o nome e o telefone sem abrir a ficha. O telefone é um link `tel:` (número português em E.164, `+351…`, quando dá para o reconhecer). Não há WhatsApp nem `wa.me`.
+
+### Mover Marcada ↔ Em processamento
+
+Na lista e na ficha, **Marcada** e **Em processamento** trocam nos dois sentidos com um toque. Não pede médico, data, nota nem mensagem. «Não atendeu» fica como está: amarelo, na inbox.
+
+O browser faz `PATCH /api/leads/:id` com `{ "status": "scheduled" }` ou `{ "status": "processing" }`. O Mini traduz isso no Apps Script já existente (`action: "update"` na aba **Inbound META**):
+
+| Toque | `status` | Legenda | Observações | Data fecho |
+| --- | --- | --- | --- | --- |
+| Em processamento → Marcada | `scheduled` | `Marcada` | o prefixo passa a `[status:scheduled]`; a nota anterior mantém-se | ISO de agora, só se a célula estiver vazia (`ifBlank`) |
+| Marcada → Em processamento | `processing` | `Em processamento` | o prefixo passa a `[status:processing]`; a nota anterior mantém-se | a célula é limpa, como quando a lead volta à inbox |
+
+Agendar pela ficha continua a gravar também **Data Primeira Consulta** e **Médico Orçamento Médico Tratamento**. O toque livre não mexe nessas colunas.
 
 O separador **Estatísticas** mostra a evolução de marcações e fecho. O gráfico é uma linha (preto = marcações, madeira = fecho) para 7, 30 ou 90 dias em Europe/Lisbon; 90 dias agrupa por semana, à segunda. **Linha** ou **Barras**. Por baixo, três linhas: Marcações, Fecho (marcadas + descartadas) e Descartadas, com quantidade e percentagem face às entradas do período. A data do fecho é **Data fecho**; se uma lead antiga não a tiver, conta pela Data Contacto.
 
