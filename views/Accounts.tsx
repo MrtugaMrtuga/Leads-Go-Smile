@@ -1,5 +1,5 @@
 import React from 'react';
-import LeadName from '../components/LeadName';
+import LeadRowMain from '../components/LeadRowMain';
 import { Lead } from '../types';
 import { formatCurrency, sortLeadsNewestFirst } from '../utils';
 
@@ -20,10 +20,10 @@ const Accounts: React.FC<AccountsProps> = ({ leads, onUpdateStatus, monthLabel, 
         <div className="list">
           {sortLeadsNewestFirst(leads).map((lead) => (
             <div key={lead.id} className="row">
-              <span className="row-main">
-                    <LeadName lead={lead} className="row-title" />
-                <span className="row-sub">{lead.status === 'paid' ? 'Pago' : 'Pendente'} · {formatCurrency(lead.value || 0)}</span>
-              </span>
+              <LeadRowMain
+                lead={lead}
+                sub={`${lead.status === 'paid' ? 'Pago' : 'Pendente'} · ${formatCurrency(lead.value || 0)}`}
+              />
               {lead.status !== 'paid' && (
                 <button
                   type="button"

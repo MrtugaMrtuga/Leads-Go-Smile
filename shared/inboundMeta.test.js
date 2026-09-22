@@ -7,6 +7,7 @@ import {
   humanizeMetaValue,
   listBucket,
   mapDataToLeads,
+  nextPipelineStatus,
   mapSheetCsv,
   pipelineBreakdown,
   pipelineStats,
@@ -267,6 +268,11 @@ test('estatísticas are percentages of every lead', () => {
   assert.equal(byLabel.Contactadas, undefined);
   assert.equal(listBucket('processing'), 'inbox');
   assert.equal(listBucket('scheduled') === 'inbox', false);
+  assert.equal(nextPipelineStatus('scheduled'), 'processing');
+  assert.equal(nextPipelineStatus('processing'), 'scheduled');
+  assert.equal(nextPipelineStatus('contacted'), 'scheduled');
+  assert.equal(nextPipelineStatus('new'), '');
+  assert.equal(nextPipelineStatus('discarded'), '');
 });
 
 test('fecho date is read from the column or the Observações marker', () => {

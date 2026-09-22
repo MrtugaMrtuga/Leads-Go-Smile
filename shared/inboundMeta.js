@@ -184,6 +184,13 @@ export function listBucket(status) {
   return 'other';
 }
 
+/** One tap between Marcada and Em processamento. Other statuses are not part of this move. */
+export function nextPipelineStatus(status) {
+  if (status === 'scheduled') return 'processing';
+  if (status === 'processing' || status === 'contacted') return 'scheduled';
+  return '';
+}
+
 export function pipelineTone(status) {
   if (status === 'discarded') return 'red';
   if (status === 'scheduled') return 'green';

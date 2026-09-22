@@ -369,6 +369,38 @@ h1.page-title {
 .row-main {
   flex: 1;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.row-hit {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0;
+}
+
+.row-name-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+.row-name-line .row-title,
+.row-name-line .day-line-act,
+.row-name-line .name-line {
+  min-width: 0;
+  flex: 1;
+}
+
+.row-name-line .lead-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .row-title {
@@ -448,6 +480,60 @@ h1.page-title {
   white-space: nowrap;
 }
 
+.row-phone,
+.detail-phone {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-height: 36px;
+  margin-top: 2px;
+  font-size: 16px;
+  font-weight: 400;
+  color: #000;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.01em;
+  text-decoration: underline;
+  text-decoration-color: #dcdcdc;
+  text-underline-offset: 3px;
+  white-space: nowrap;
+}
+
+.row-phone.is-empty,
+.detail-phone.is-empty {
+  color: var(--mute);
+  font-size: 13px;
+  min-height: 0;
+  text-decoration: none;
+}
+
+.detail-phone {
+  margin: 0 0 12px;
+}
+
+.row-side {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 2px;
+  flex: 0 0 auto;
+  max-width: 140px;
+}
+
+.row-move {
+  flex: 0 0 auto;
+  align-self: center;
+  max-width: 140px;
+  min-height: 36px;
+  padding: 6px 0 6px 8px;
+  color: #000;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.2;
+  text-align: right;
+  white-space: normal;
+}
+
 .chevron {
   color: var(--mute);
   font-size: 22px;
@@ -458,9 +544,9 @@ h1.page-title {
 
 .day-line {
   display: grid;
-  grid-template-columns: 58px 1fr auto;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
   gap: 12px;
-  align-items: baseline;
+  align-items: center;
   min-height: 48px;
   padding: 13px 0;
   border-top: 1px solid #dcdcdc;

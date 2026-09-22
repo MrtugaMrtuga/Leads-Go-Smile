@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import LeadName from '../components/LeadName';
+import LeadRowMain from '../components/LeadRowMain';
 import { Lead } from '../types';
 import { formatCurrency, sortLeadsNewestFirst } from '../utils';
 
@@ -106,10 +106,10 @@ const Admin: React.FC<AdminProps> = ({
             <>
               {completedLeads.map((lead) => (
                 <div key={lead.id} className="row">
-                  <span className="row-main">
-                    <LeadName lead={lead} className="row-title" />
-                    <span className="row-sub">Pendente · {formatCurrency((lead.value || 0) * (settings.commissionPercent / 100))}</span>
-                  </span>
+                  <LeadRowMain
+                    lead={lead}
+                    sub={`Pendente · ${formatCurrency((lead.value || 0) * (settings.commissionPercent / 100))}`}
+                  />
                   <button type="button" onClick={() => onUpdateStatus(lead.id, { status: 'paid' }, { status: 'paid', estado: 'PAGO' })}>
                     Pago
                   </button>
@@ -117,10 +117,10 @@ const Admin: React.FC<AdminProps> = ({
               ))}
               {paidLeads.map((lead) => (
                 <div key={lead.id} className="row">
-                  <span className="row-main">
-                    <LeadName lead={lead} className="row-title" />
-                    <span className="row-sub">Recebido · {formatCurrency((lead.value || 0) * (settings.commissionPercent / 100))}</span>
-                  </span>
+                  <LeadRowMain
+                    lead={lead}
+                    sub={`Recebido · ${formatCurrency((lead.value || 0) * (settings.commissionPercent / 100))}`}
+                  />
                 </div>
               ))}
             </>
