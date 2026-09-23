@@ -286,7 +286,9 @@ test('sheet rows are not deleted through the API', async () => {
 test('apps script is bound to Inbound META and the client bundle has no secret', () => {
   const gas = readFileSync(new URL('../backend-gas/Code.gs', import.meta.url), 'utf8');
   const client = `${readFileSync(new URL('../api.ts', import.meta.url), 'utf8')}\n${readFileSync(new URL('../App.tsx', import.meta.url), 'utf8')}\n${readFileSync(new URL('../public/pin.js', import.meta.url), 'utf8')}`;
+  assert.match(gas, /var SHEET_ID = '1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8'/);
   assert.match(gas, /1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w/);
+  assert.doesNotMatch(gas, /var SHEET_ID = '1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w'/);
   assert.match(gas, /Inbound META/);
   assert.match(gas, /Leads \(2024 - 2026\)/);
   assert.doesNotMatch(gas, /1LMcABX/);

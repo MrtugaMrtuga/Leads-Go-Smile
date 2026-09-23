@@ -1,15 +1,16 @@
 /**
  * Leads Go Smile — web app da aba «Inbound META».
  *
- * Sheet: 1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w
- * Ligar este projecto a essa folha (Extensões → Apps Script no documento).
+ * Folha ligada ao Apps Script (live /exec): 1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8
+ * A folha de Daniel 1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w (Constant Circle)
+ * é a fonte Meta inbound / sync, não a folha ligada a este script.
  * Só lê e escreve a aba «Inbound META». A aba histórica não é usada.
  *
  * Segredo: propriedade do script APPS_SCRIPT_SECRET, igual à env do Mini.
  * O mapeamento de colunas espelha shared/inboundMeta.js.
  */
 
-var SHEET_ID = '1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w';
+var SHEET_ID = '1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8';
 var SHEET_TAB = 'Inbound META';
 var FORBIDDEN_TAB = 'Leads (2024 - 2026)';
 

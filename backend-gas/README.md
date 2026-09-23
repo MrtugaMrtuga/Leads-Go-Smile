@@ -2,21 +2,24 @@
 
 Web app grátis, ligada à folha **Leads - Go Smile**. Não há projecto Google Cloud, conta de serviço nem billing.
 
-- Sheet: `1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`
+- Folha ligada ao Apps Script (live `/exec`): `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8`
+- Fonte Meta inbound / sync (Daniel, Constant Circle), não é a folha ligada: `1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`
 - Aba única: **Inbound META**
 - A aba «Leads (2024 - 2026)» não é lida nem escrita.
+
+O `/exec` em produção já está ligado à folha de cima. Este ficheiro regista esse ID. Não crie outra implementação por cima do URL live só para alinhar o repositório.
 
 O Mini (Node, porta 3040) chama este `/exec` com o segredo. O browser nunca recebe o segredo.
 
 ## 1. Ligar o script à folha
 
-1. Abra a folha com uma conta que a possa editar (de preferência brunoairesaugusto@gmail.com; a folha é de daniel@constantcircle.co e está partilhada).
+1. A folha ligada é `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8` (conta que a edita, de preferência brunoairesaugusto@gmail.com). A de daniel@constantcircle.co (`1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`) é só a fonte Meta inbound / sync.
 2. **Extensões → Apps Script**.
 3. Apague o `Code.gs` de exemplo e cole [`Code.gs`](./Code.gs).
 4. Em **Definições do projecto → Mostrar ficheiro de manifesto**, confirme o [`appsscript.json`](./appsscript.json) (fuso `Europe/Lisbon`, runtime V8).
 5. Guarde.
 
-O código abre a folha pelo ID acima. Mesmo assim o projecto tem de ficar **ligado a esta folha** (criado a partir dela), para a autorização ser a de Apps Script e não um projecto Cloud.
+O código abre `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8` pelo `SHEET_ID`. Mesmo assim o projecto tem de ficar **ligado a esta folha** (criado a partir dela), para a autorização ser a de Apps Script e não um projecto Cloud.
 
 ## 2. Segredo
 
