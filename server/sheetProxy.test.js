@@ -176,15 +176,20 @@ test('CRM patch is posted to Apps Script and keeps the secret off the response',
     assert.equal(response.json.formFields.some((field) => String(field.value).includes('[status:')), false);
   });
 
-  const post = calls.find((callItem) => callItem.method === 'POST' && String(callItem.url).includes('googleusercontent'));
-  assert.ok(post);
-  const body = JSON.parse(post.body);
+  // Apps Script runs doPost on the first hop, then 302→echo (GET-only) for the JSON body.
+  const first = calls.find((callItem) => callItem.method === 'POST' && String(callItem.url).includes('script.google.com'));
+  assert.ok(first);
+  const body = JSON.parse(first.body);
   assert.equal(body.action, 'update');
   assert.equal(body.id, '2');
   assert.equal(body.note, 'liguei hoje');
   assert.equal(body.noteSet, true);
   assert.equal(JSON.stringify(body).includes('O que gostaria de melhorar'), false);
   assert.equal(body.secret, undefined);
+  const echo = calls.find((callItem) => String(callItem.url).includes('googleusercontent'));
+  assert.ok(echo);
+  assert.equal(echo.method, 'GET');
+  assert.equal(echo.body, undefined);
 });
 
 test('marking paid writes Pagamento and keeps the existing note', async () => {
