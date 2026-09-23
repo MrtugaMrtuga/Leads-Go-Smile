@@ -49,11 +49,50 @@ function leadFromPayload(payload) {
   return leads[0] || null;
 }
 
+const GAS_TIMEOUT_MS = Number(process.env.APPS_SCRIPT_TIMEOUT_MS || 55000);
+const GAS_RETRIES = Number(process.env.APPS_SCRIPT_RETRIES || 2);
+const LIST_CACHE_MS = Number(process.env.APPS_SCRIPT_LIST_CACHE_MS || 8000);
+
+function isTransientFetchError(error) {
+  const name = String(error?.name || '');
+  const msg = String(error?.message || error || '');
+  return name === 'TimeoutError' || name === 'AbortError' || /timeout|aborted|fetch failed|network|ECONNRESET|ETIMEDOUT/i.test(msg);
+}
+
+function isTransientSheetMessage(message) {
+  return /HTML|indisponível|indisponivel|timeout|aborted|HTTP 5\d\d|Demasiados redireccionamentos/i.test(String(message || ''));
+}
+
+/** Serialize Apps Script calls — parallel stampede returns HTML 404 pages. */
+let gasQueue = Promise.resolve();
+function enqueueGas(task) {
+  const run = gasQueue.then(task, task);
+  gasQueue = run.then(() => undefined, () => undefined);
+  return run;
+}
+
+let listCache = { at: 0, value: null };
+let listInflight = null;
+
 async function fetchFollowing(url, { method = 'GET', body, fetchImpl }) {
-  let currentUrl = String(url);
-  let currentMethod = method;
-  let currentBody = body;
   const fetchFn = fetchImpl || globalThis.fetch;
+  const upper = String(method || 'GET').toUpperCase();
+
+  // GET: let undici follow redirects (same as curl -L). Manual hop for POST
+  // so we never lose the body on Apps Script's 302→echo (GET-only) hop.
+  if (upper === 'GET' && !body) {
+    return fetchFn(String(url), {
+      method: 'GET',
+      redirect: 'follow',
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(GAS_TIMEOUT_MS),
+    });
+  }
+
+  let currentUrl = String(url);
+  let currentMethod = upper;
+  let currentBody = body;
 
   for (let hop = 0; hop < 5; hop += 1) {
     const response = await fetchFn(currentUrl, {
@@ -64,17 +103,16 @@ async function fetchFollowing(url, { method = 'GET', body, fetchImpl }) {
         ? { Accept: 'application/json', 'Content-Type': 'application/json' }
         : { Accept: 'application/json' },
       body: currentBody,
-      signal: AbortSignal.timeout(25000),
+      signal: AbortSignal.timeout(GAS_TIMEOUT_MS),
     });
 
     if (response.status >= 300 && response.status < 400) {
       const location = response.headers.get('location');
       if (!location) throw new SheetError('Redireccionamento do Apps Script sem destino');
       currentUrl = new URL(location, currentUrl).toString();
-      if (response.status === 303) {
-        currentMethod = 'GET';
-        currentBody = undefined;
-      }
+      // After the first hop, Apps Script echo endpoints only allow GET.
+      currentMethod = 'GET';
+      currentBody = undefined;
       continue;
     }
 
@@ -92,45 +130,99 @@ export async function gasRequest({ action, method = 'GET', body, fetchImpl, env 
   endpoint.searchParams.set('secret', secret);
   endpoint.searchParams.set('action', action);
 
-  let response;
-  try {
-    response = await fetchFollowing(endpoint, {
-      method,
-      body: body ? JSON.stringify({ ...body, action }) : undefined,
-      fetchImpl,
-    });
-  } catch (error) {
-    if (error instanceof SheetError) throw error;
-    throw new SheetError(`Folha Inbound META indisponível (${redact(error.message || error)})`);
-  }
+  const attempts = Math.max(1, GAS_RETRIES + 1);
 
-  const text = await response.text();
-  const trimmed = text.trim();
-  if (!trimmed || trimmed.startsWith('<')) {
-    throw new SheetError('O Apps Script devolveu HTML. Publique como aplicação web «Qualquer pessoa» com URL /exec.');
-  }
+  return enqueueGas(async () => {
+    let lastError;
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      let response;
+      try {
+        response = await fetchFollowing(endpoint, {
+          method,
+          body: body ? JSON.stringify({ ...body, action }) : undefined,
+          fetchImpl,
+        });
+      } catch (error) {
+        if (error instanceof SheetError) {
+          lastError = error;
+          if (attempt < attempts && isTransientSheetMessage(error.message)) {
+            await new Promise((r) => setTimeout(r, 500 * attempt));
+            continue;
+          }
+          throw error;
+        }
+        lastError = error;
+        if (attempt < attempts && isTransientFetchError(error)) {
+          await new Promise((r) => setTimeout(r, 500 * attempt));
+          continue;
+        }
+        throw new SheetError(`Folha Inbound META indisponível (${redact(error.message || error)})`);
+      }
 
-  let payload;
-  try {
-    payload = JSON.parse(trimmed);
-  } catch {
-    throw new SheetError('Resposta inválida da folha Inbound META');
-  }
+      const textBody = await response.text();
+      const trimmed = textBody.trim();
+      if (!trimmed || trimmed.startsWith('<')) {
+        lastError = new SheetError('O Apps Script devolveu HTML. Publique como aplicação web «Qualquer pessoa» com URL /exec.');
+        if (attempt < attempts) {
+          await new Promise((r) => setTimeout(r, 500 * attempt));
+          continue;
+        }
+        throw lastError;
+      }
 
-  if (!payload || payload.ok === false) {
-    const message = String(payload?.error || `Folha Inbound META HTTP ${response.status}`);
-    const statusCode = /não encontrada|nao encontrada/i.test(message) ? 404 : 502;
-    throw new SheetError(message, statusCode);
-  }
+      let payload;
+      try {
+        payload = JSON.parse(trimmed);
+      } catch {
+        lastError = new SheetError('Resposta inválida da folha Inbound META');
+        if (attempt < attempts) {
+          await new Promise((r) => setTimeout(r, 500 * attempt));
+          continue;
+        }
+        throw lastError;
+      }
 
-  return payload;
+      if (!payload || payload.ok === false) {
+        const message = String(payload?.error || `Folha Inbound META HTTP ${response.status}`);
+        const statusCode = /não encontrada|nao encontrada/i.test(message) ? 404 : 502;
+        lastError = new SheetError(message, statusCode);
+        if (attempt < attempts && statusCode >= 500) {
+          await new Promise((r) => setTimeout(r, 500 * attempt));
+          continue;
+        }
+        throw lastError;
+      }
+
+      return payload;
+    }
+
+    throw lastError || new SheetError('Folha Inbound META indisponível');
+  });
 }
 
 export async function listInboundLeads(options = {}) {
   const cfg = appsScriptConfig(options.env);
   if (!cfg.configured) return { leads: [], configured: false };
-  const payload = await gasRequest({ action: 'leads', method: 'GET', ...options });
-  return { leads: leadsFromPayload(payload), configured: true };
+
+  const now = Date.now();
+  if (!options.bypassCache && listCache.value && now - listCache.at < LIST_CACHE_MS) {
+    return { leads: listCache.value, configured: true };
+  }
+  if (!options.bypassCache && listInflight) {
+    return listInflight;
+  }
+
+  const task = (async () => {
+    const payload = await gasRequest({ action: 'leads', method: 'GET', ...options });
+    const leads = leadsFromPayload(payload);
+    listCache = { at: Date.now(), value: leads };
+    return { leads, configured: true };
+  })();
+
+  listInflight = task.finally(() => {
+    listInflight = null;
+  });
+  return listInflight;
 }
 
 export async function getInboundLead(id, options = {}) {
