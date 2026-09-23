@@ -1,9 +1,13 @@
 /**
  * Inbound META column map (sheet tab "Inbound META") and lead mapping.
  * Values stay raw here; the UI humanizes snake_case for display.
+ *
+ * SHEET_ID is the sheet bound to the live Apps Script /exec.
+ * Daniel's sheet 1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w (Constant Circle)
+ * is the Meta inbound / sync source, not this ID. Nothing in the Node server reads SHEET_ID.
  */
 
-export const SHEET_ID = '1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w';
+export const SHEET_ID = '1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8';
 export const SHEET_TAB = 'Inbound META';
 
 export const COLUMN_DEFS = [
