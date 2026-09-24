@@ -1,4 +1,4 @@
-const CACHE = 'gosmile-leads-menu-v3';
+const CACHE = 'gosmile-leads-menu-v4';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -13,6 +13,7 @@ self.addEventListener('install', (event) => {
         '/apple-touch-icon.png',
         '/icon-192.png',
         '/icon-512.png',
+        '/icon-1024.png',
       ])
     )
   );
