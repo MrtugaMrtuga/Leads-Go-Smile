@@ -1,9 +1,19 @@
-const CACHE = 'gosmile-leads-menu-v2';
+const CACHE = 'gosmile-leads-menu-v3';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE).then((cache) =>
-      cache.addAll(['/', '/index.html', '/look.css', '/pin.js', '/logo_Gosmilesimple.png', '/manifest.webmanifest'])
+      cache.addAll([
+        '/',
+        '/index.html',
+        '/look.css',
+        '/pin.js',
+        '/logo_Gosmilesimple.png',
+        '/manifest.webmanifest',
+        '/apple-touch-icon.png',
+        '/icon-192.png',
+        '/icon-512.png',
+      ])
     )
   );
   self.skipWaiting();
