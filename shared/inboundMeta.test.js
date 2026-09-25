@@ -117,10 +117,10 @@ test('mapSheetCsv keeps filled Leads (2024 - 2026) fields and hides empties', ()
 test('mapDataToLeads reads sheet objects and preserves stored leads', () => {
   const [mapped] = mapDataToLeads([
     {
+      '4': '2026-09-01T10:00:00.000Z',
       Nome: 'Ana Exemplo',
       Telefone: '351910000000',
       Email: 'ana@example.com',
-      'Data Contacto': '2026-09-01T10:00:00.000Z',
       'O que gostaria de melhorar no seu sorriso?': 'branquear_dentes',
     },
   ]);
@@ -212,8 +212,8 @@ test('Estado and não atendeu stay in the inbox as processing', () => {
 test('old Inbound META headers still map onto the historical columns', () => {
   const [lead] = mapSheetCsv(
     toCsv([
-      ['Nome Paciente', 'E-mail', 'Telefone', 'Observações', 'Legenda', 'Médico Orçamento Médico Tratamento', 'Nº paciente', 'Data Contacto'],
-      ['Ana Antiga', 'ana@example.com', '351910000000', 'liguei', 'Marcada', 'Bruno Aires', '42', '2026-09-02'],
+      ['4', 'Nome Paciente', 'E-mail', 'Telefone', 'Observações', 'Legenda', 'Médico Orçamento Médico Tratamento', 'Nº paciente', 'Data Contacto'],
+      ['2026-09-23 22:15:37', 'Ana Antiga', 'ana@example.com', '351910000000', 'liguei', 'Marcada', 'Bruno Aires', '42', '04.10.24 - 12h'],
     ])
   );
   assert.equal(lead.name, 'Ana Antiga');
@@ -222,7 +222,7 @@ test('old Inbound META headers still map onto the historical columns', () => {
   assert.equal(lead.status, 'scheduled');
   assert.equal(lead.doctor, 'Bruno Aires');
   assert.equal(lead.crm.numero_paciente, '42');
-  assert.equal(lead.contactDay, '2026-09-02');
+  assert.equal(lead.contactDay, '2026-09-23');
   assert.equal(lead.formFields.find((field) => field.key === 'nome').label, 'Nome');
   assert.equal(lead.formFields.find((field) => field.key === 'observacoes').label, 'Comentários');
   assert.equal(lead.formFields.find((field) => field.key === 'estado').label, 'Estado');
@@ -367,7 +367,7 @@ test('lead lists put the newest Data Contacto first', () => {
 test('portuguese sheet dates stay on the contact day', () => {
   const [lead] = mapSheetCsv(
     toCsv([
-      ['Data Contacto', 'Nome'],
+      ['4', 'Nome'],
       ['20/09/2026 18:14', 'Ida Cristina'],
     ])
   );
@@ -387,11 +387,11 @@ test('portuguese sheet dates stay on the contact day', () => {
   assert.equal(contactDayFromText('23-09-2026'), '2026-09-23');
 });
 
-test('app list keeps contact days on or after 2026-09-01 and prefers a Meta timestamp', () => {
+test('app list keeps column A on or after 2026-09-01', () => {
   assert.equal(CONTACT_CUTOFF_DAY, '2026-09-01');
   const leads = mapSheetCsv(
     toCsv([
-      ['timestamp', 'Nome', 'Data Contacto'],
+      ['4', 'Nome', 'Data Contacto'],
       ['2026-09-20T10:00:00.000Z', 'Dentro pelo timestamp e pela data', '2026-09-02'],
       ['2026-09-15T10:00:00.000Z', 'Timestamp novo mas contacto antigo', '2026-08-20'],
       ['2026-09-03T00:30:00.000Z', 'Só timestamp', ''],
@@ -399,7 +399,7 @@ test('app list keeps contact days on or after 2026-09-01 and prefers a Meta time
       ['', 'Sem data', ''],
       ['2026-08-31T23:30:00.000Z', 'Véspera em UTC já é 1 de Setembro em Lisboa', ''],
       ['2026-09-01', 'Dia do corte', ''],
-      ['2024-10-03 22:15:37', 'Contacto ilegível cai no timestamp', 'ver depois'],
+      ['2024-10-03 22:15:37', 'Data Contacto em Setembro não entra', '02.09.26 - 9h'],
     ])
   );
   const names = filterLeadsForApp(leads).map((lead) => lead.name);
@@ -414,7 +414,7 @@ test('app list keeps contact days on or after 2026-09-01 and prefers a Meta time
   assert.equal(both.contactDay, '2026-09-20');
   const preferred = leads.find((lead) => lead.name === 'Timestamp novo mas contacto antigo');
   assert.equal(preferred.contactDay, '2026-09-15');
-  const oldStamp = leads.find((lead) => lead.name === 'Contacto ilegível cai no timestamp');
+  const oldStamp = leads.find((lead) => lead.name === 'Data Contacto em Setembro não entra');
   assert.equal(oldStamp.contactDay, '2024-10-03');
   assert.equal(filterLeadsForApp([oldStamp]).length, 0);
 });
@@ -449,16 +449,16 @@ test('Drive sample reads column A as timestamp when the header is 4', () => {
     ])
   );
   const byName = Object.fromEntries(leads.map((lead) => [lead.name, lead]));
-  assert.equal(byName.Histórica.contactDay, '2024-10-04');
+  assert.equal(byName.Histórica.contactDay, '2024-10-03');
   assert.equal(byName['Meta Nova'].contactDay, '2026-09-23');
   assert.equal(byName['Sem data de contacto'].contactDay, '2026-09-24');
-  assert.equal(byName['Contacto em Setembro'].contactDay, '2026-09-02');
+  assert.equal(byName['Contacto em Setembro'].contactDay, '2024-10-03');
   assert.equal(byName.Histórica.formFields.some((field) => field.label === '4'), false);
+  assert.equal(byName['Sem data de contacto'].formFields.find((field) => field.key === 'data_contacto').value, 'ver depois');
   assert.equal(byName.Histórica.origem || byName.Histórica.source, 'Meta');
   assert.deepEqual(filterLeadsForApp(leads).map((lead) => lead.name), [
     'Meta Nova',
     'Sem data de contacto',
-    'Contacto em Setembro',
   ]);
 
   const [blankHeader] = mapSheetCsv(

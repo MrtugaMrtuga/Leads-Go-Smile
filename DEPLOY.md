@@ -105,7 +105,7 @@ No Safari ou Chrome, abra https://leads.evob.org, introduza o PIN **2000**, depo
 
 ## 7. Cópias de segurança
 
-A base das leads é a Google Sheet (aba Leads (2024 - 2026), só datas de contacto >= 2026-09-01). `data/leads.json` é esvaziado no arranque e não deve ser restaurado como fonte. Faça backup de `data/settings.json` e `data/reminders.json` se quiser guardar comissão e lembretes. Sync e população da aba ficam fora deste PR.
+A base das leads é a Google Sheet (aba Leads (2024 - 2026), só coluna A >= 2026-09-01). `data/leads.json` é esvaziado no arranque e não deve ser restaurado como fonte. Faça backup de `data/settings.json` e `data/reminders.json` se quiser guardar comissão e lembretes. Sync e população da aba ficam fora deste PR.
 
 ```bash
 rsync -a data/settings.json data/reminders.json /Volumes/Backup/evault-leads-data/

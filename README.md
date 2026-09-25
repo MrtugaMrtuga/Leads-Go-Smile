@@ -4,7 +4,7 @@ PWA de CRM para **https://leads.evob.org**, look **GoSmile V2-pt**, a correr no 
 
 A fonte de verdade é a Google Sheet `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8`, aba **Leads (2024 - 2026)** (nome exacto, com espaços), via Apps Script grátis (`/exec`). A folha de Daniel `1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w` não é a folha ligada ao script. Não há projecto Google Cloud, conta de serviço nem billing. A aba «Inbound META» não é lida nem escrita. O histórico que estava em `data/leads.json` deixa de contar: no arranque o ficheiro fica `[]` e não volta a ser carregado.
 
-A lista da app (`GET /api/leads`) só inclui leads cuja data de contacto é em ou depois de **2026-09-01** (dia de calendário Europe/Lisbon). Um **timestamp** nesse dia ou depois ganha (leads Meta). Senão usa-se **Data Contacto** (`04.10.24 - 12h`, `DD-MM-YYYY`, ISO). Se essa célula estiver vazia ou ilegível, cai no timestamp. A coluna A conta como timestamp mesmo com cabeçalho vazio ou `4`. Uma gravação por id de linha não depende deste corte. Sync e população da aba ficam fora deste PR ([SYNC-DANIEL-EVOB.md](./SYNC-DANIEL-EVOB.md)). Etiqueta sugerida: `MacMini-leads-tab-2024-v1`.
+A lista da app (`GET /api/leads`) só inclui leads cuja **coluna A** (cabeçalho literal `4`, timestamp ISO) é em ou depois de **2026-09-01** (dia de calendário Europe/Lisbon). **Data Contacto** é texto de CRM e não decide a lista. Uma gravação por id de linha não depende deste corte. Sync e população da aba ficam fora deste PR ([SYNC-DANIEL-EVOB.md](./SYNC-DANIEL-EVOB.md)). Etiqueta sugerida: `MacMini-leads-tab-2024-v1`.
 
 O browser só fala com `/api` no mesmo origin. O segredo do Apps Script fica no Mini (`APPS_SCRIPT_SECRET`) e não entra no frontend.
 

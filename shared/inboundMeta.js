@@ -8,11 +8,10 @@
  * is not this ID. Tab setup and sync live outside this project.
  * Nothing in the Node server reads SHEET_ID.
  *
- * App lists include a row only when the contact day is on or after CONTACT_CUTOFF_DAY
- * (Europe/Lisbon). A timestamp on or after that day wins (Meta rows). Otherwise use
- * Data Contacto when it parses; if it is empty or unparseable, use the timestamp column.
- * Column A is the timestamp when its header is Timestamp, Data, blank, or a numeric
- * Drive label such as "4". Updates by row id are not dropped by this cutoff.
+ * App lists include a row only when column A (the ISO timestamp) is on or after
+ * CONTACT_CUTOFF_DAY (Europe/Lisbon). The live header of that column is the literal "4".
+ * Data Contacto is CRM free text and does not decide the list. Updates by row id
+ * are not dropped by this cutoff.
  */
 
 export const SHEET_ID = '1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8';
@@ -23,7 +22,7 @@ export const SHEET_TAB = 'Leads (2024 - 2026)';
 export const CONTACT_CUTOFF_DAY = '2026-09-01';
 
 export const COLUMN_DEFS = [
-  { key: 'timestamp_col', header: 'timestamp', aliases: ['Timestamp', 'Data', 'Carimbo de data/hora'] },
+  { key: 'timestamp_col', header: 'timestamp', aliases: ['4', 'Timestamp', 'Data', 'Carimbo de data/hora'] },
   { key: 'origem', header: 'Origem' },
   { key: 'nome', header: 'Nome', aliases: ['Nome Paciente', 'Nome do paciente'] },
   { key: 'email', header: 'Email', aliases: ['E-mail', 'E-Mail'] },
@@ -298,29 +297,14 @@ export function contactDayFromText(value) {
   return lisbonDayKey(text);
 }
 
-/**
- * Contact day for the app cutoff.
- * A timestamp on or after CONTACT_CUTOFF_DAY wins (Meta rows that just landed).
- * Otherwise Data Contacto, when it parses. If that cell is empty or unparseable, the timestamp column.
- */
+/** Contact day for the app cutoff: column A only (header literally "4" on the live tab). */
 export function contactDayFromRaw(raw = {}) {
-  const stampDay = contactDayFromText(raw.timestamp_col);
-  const contactDay = contactDayFromText(raw.data_contacto);
-  if (stampDay && stampDay >= CONTACT_CUTOFF_DAY) return stampDay;
-  if (contactDay) return contactDay;
-  return stampDay;
+  return contactDayFromText(raw.timestamp_col);
 }
 
-/** Cell text that produced contactDayFromRaw, for display and sorting. */
+/** Column A text, for display and sorting. CRM Data Contacto is not this value. */
 export function contactSourceText(raw = {}) {
-  const stamp = String(raw.timestamp_col || '').trim();
-  const contact = String(raw.data_contacto || '').trim();
-  const stampDay = contactDayFromText(stamp);
-  const contactDay = contactDayFromText(contact);
-  if (stampDay && stampDay >= CONTACT_CUTOFF_DAY) return stamp;
-  if (contactDay) return contact;
-  if (stampDay) return stamp;
-  return contact || stamp;
+  return String(raw.timestamp_col || '').trim();
 }
 
 export function leadContactDay(lead) {

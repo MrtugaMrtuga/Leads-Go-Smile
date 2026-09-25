@@ -16,7 +16,7 @@ const { createApp } = await import('./index.js');
 
 const SECRET = 'mini-only-secret-value';
 const HEADERS = [
-  'timestamp',
+  '4',
   'Origem',
   'Nome',
   'Email',
@@ -132,6 +132,10 @@ test('listing uses Leads (2024 - 2026) rows on or after the cutoff and ignores l
     preferredOld[0] = '2026-09-20T10:00:00.000Z';
     preferredOld[2] = 'Contacto Antigo';
     preferredOld[5] = '2026-08-20';
+    const crmSeptember = [...IDA_VALUES];
+    crmSeptember[0] = '2024-10-03 22:15:37';
+    crmSeptember[2] = 'CRM Setembro';
+    crmSeptember[5] = '02.09.26 - 9h';
     return new Response(JSON.stringify({
       ...sheetPayload(),
       rows: [
@@ -139,6 +143,7 @@ test('listing uses Leads (2024 - 2026) rows on or after the cutoff and ignores l
         { row: 3, values: old },
         { row: 4, values: stampOnly },
         { row: 5, values: preferredOld },
+        { row: 6, values: crmSeptember },
       ],
     }), {
       status: 200,
@@ -342,6 +347,7 @@ test('apps script is bound to Leads (2024 - 2026) and the client bundle has no s
   assert.match(gas, /var SHEET_ID = '1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8'/);
   assert.match(gas, /1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w/);
   assert.doesNotMatch(gas, /var SHEET_ID = '1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w'/);
+  assert.match(gas, /aliases: \['4', 'Timestamp'/);
   assert.match(gas, /var SHEET_TAB = 'Leads \(2024 - 2026\)'/);
   assert.match(gas, /var CONTACT_CUTOFF_DAY = '2026-09-01'/);
   assert.match(gas, /passesContactCutoff_/);

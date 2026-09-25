@@ -88,9 +88,9 @@ Não há variáveis novas no Mini. `APPS_SCRIPT_URL` e `APPS_SCRIPT_SECRET` cheg
 | Lista e cor | **Estado** (aceita **Legenda** se for esse o cabeçalho) | `Em processamento` (amarelo, fica na inbox), `Marcada` (verde, lista Marcadas), `Descartada` (vermelho, lista Descartadas). Vazio = nova, sem bola |
 | Estado da app | **Comentários** (aceita **Observações**), prefixo `[status:…]` | `new`, `contacted`, `processing`, `discarded`, `scheduled`, `positive`, `completed`, `paid`. A UI não mostra o prefixo |
 | Motivo do descarte | **Comentários**, linha `[motivo:…]` | Obrigatório para passar a `discarded`. Sobrevive ao reload. A UI mostra o texto, não o marcador |
-| Nome, email, telefone, origem | **Nome** (ou Nome Paciente), **Email** (ou E-mail), **Telefone**, **Origem** | Leitura. O create grava Nome, Email, Telefone, Data Contacto e Comentários |
+| Nome, email, telefone, origem | **Nome** (ou Nome Paciente), **Email** (ou E-mail), **Telefone**, **Origem** | Leitura. O create grava a coluna A (cabeçalho `4`), Nome, Email, Telefone e Comentários |
 | Marcação | **Data Primeira Consulta** e **Médico** | Já usados por Agendar, em conjunto com Estado `Marcada` |
-| Corte da lista | **timestamp** da coluna A (cabeçalho Timestamp, Data, vazio ou `4`) quando o dia é >= `2026-09-01`; senão **Data Contacto** (`04.10.24 - 12h`, ISO, `DD-MM-YYYY`); se ilegível, o timestamp | Só essas linhas entram em `action=leads`. O update por id não usa este corte |
+| Corte da lista | **Coluna A** (cabeçalho literal `4`, timestamp ISO) com dia >= `2026-09-01` (Europe/Lisbon) | Só essas linhas entram em `action=leads`. Data Contacto não decide a lista. O update por id não usa este corte |
 | Data do fecho | **Data fecho** (criada na primeira gravação se a coluna não existir) e, na mesma célula de Comentários, `[fecho:…]` | ISO de quando a lead saiu da inbox (marcada ou descartada). A primeira data mantém-se. Voltar à inbox apaga-a. Se faltar nas linhas antigas, a evolução usa a Data Contacto |
 
 Na primeira vez que uma lead passa a marcada ou descartada, o script acrescenta o cabeçalho **Data fecho** no fim da linha 1, se ele ainda não existir. Não mexe nas outras colunas.
@@ -103,6 +103,6 @@ Depois de colar este `Code.gs`: **Implementar → Gerir implementações → lá
 
 `Comentários` guarda a nota e, quando há estado da app, o prefixo `[status:…]`, que a UI não mostra. O motivo, quando existe, fica na linha seguinte. Se a folha ainda tiver **Observações** e não **Comentários**, a gravação cai nessa coluna.
 
-`action=create` acrescenta uma linha com Data Contacto, Nome, Telefone, Email e Comentários.
+`action=create` acrescenta uma linha com o timestamp na coluna A (cabeçalho `4`), Nome, Telefone, Email e Comentários.
 
 `action=leads` omite linhas anteriores a 2026-09-01. `action=update` grava o id pedido na mesma.

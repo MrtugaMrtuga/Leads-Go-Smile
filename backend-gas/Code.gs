@@ -6,11 +6,9 @@
  * não está ligada a este script. Sync e população da aba ficam fora deste projecto.
  * Só lê e escreve a aba «Leads (2024 - 2026)».
  *
- * A lista (action=leads) inclui só linhas com data de contacto >= 2026-09-01
- * (dia de calendário Europe/Lisbon). Um timestamp nesse dia ou depois ganha
- * (leads Meta). Senão, Data Contacto se for legível; se vazia ou ilegível, timestamp.
- * A coluna A é o timestamp quando o cabeçalho é Timestamp, Data, vazio, ou um
- * número de exportação (por exemplo «4»). update/create não aplicam este corte.
+ * A lista (action=leads) inclui só linhas cuja coluna A (cabeçalho literal «4»,
+ * timestamp ISO) é >= 2026-09-01 (dia de calendário Europe/Lisbon).
+ * Data Contacto é texto de CRM e não decide a lista. update/create não aplicam este corte.
  *
  * Segredo: propriedade do script APPS_SCRIPT_SECRET, igual à env do Mini.
  * O mapeamento de colunas espelha shared/inboundMeta.js.
@@ -21,7 +19,7 @@ var SHEET_TAB = 'Leads (2024 - 2026)';
 var CONTACT_CUTOFF_DAY = '2026-09-01';
 
 var COLUMN_DEFS = [
-  { key: 'timestamp_col', header: 'timestamp', aliases: ['Timestamp', 'Data', 'Carimbo de data/hora'] },
+  { key: 'timestamp_col', header: 'timestamp', aliases: ['4', 'Timestamp', 'Data', 'Carimbo de data/hora'] },
   { key: 'origem', header: 'Origem' },
   { key: 'nome', header: 'Nome', aliases: ['Nome Paciente', 'Nome do paciente'] },
   { key: 'email', header: 'Email', aliases: ['E-mail', 'E-Mail'] },
@@ -181,22 +179,11 @@ function contactDayFromText_(value) {
 }
 
 function contactDayFromRaw_(raw) {
-  var stampDay = contactDayFromText_((raw && raw.timestamp_col) || '');
-  var contactDay = contactDayFromText_((raw && raw.data_contacto) || '');
-  if (stampDay && stampDay >= CONTACT_CUTOFF_DAY) return stampDay;
-  if (contactDay) return contactDay;
-  return stampDay;
+  return contactDayFromText_((raw && raw.timestamp_col) || '');
 }
 
 function contactSourceText_(raw) {
-  var stamp = String((raw && raw.timestamp_col) || '').trim();
-  var contact = String((raw && raw.data_contacto) || '').trim();
-  var stampDay = contactDayFromText_(stamp);
-  var contactDay = contactDayFromText_(contact);
-  if (stampDay && stampDay >= CONTACT_CUTOFF_DAY) return stamp;
-  if (contactDay) return contact;
-  if (stampDay) return stamp;
-  return contact || stamp;
+  return String((raw && raw.timestamp_col) || '').trim();
 }
 
 function claimTimestampColumn_(indexed, values, raw) {
@@ -642,7 +629,10 @@ function createLead_(body) {
       row[column.index] = value;
     }
 
-    put('Data Contacto', 1, body.dataContacto || new Date().toISOString());
+    var stamp = body.dataContacto || new Date().toISOString();
+    var stampColumn = findDefColumn_(indexed, defByKey_('timestamp_col'));
+    if (stampColumn) row[stampColumn.index] = stamp;
+    else put('Data Contacto', 1, stamp);
     put('Nome', 1, name);
     put('Telefone', 1, body.phone || body.telefone || '');
     put('Email', 1, body.email || '');
