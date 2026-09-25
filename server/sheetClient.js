@@ -3,7 +3,7 @@
  * The secret stays in the Mini environment and is never sent to the browser.
  */
 
-import { leadFromSheetRow, mapDataToLeads } from '../shared/inboundMeta.js';
+import { SHEET_TAB, filterLeadsForApp, leadFromSheetRow, mapDataToLeads } from '../shared/inboundMeta.js';
 import { leadPatchToFields, PipelineError } from '../shared/sheetWrite.js';
 
 const PLACEHOLDER = /replace_with|changeme|your[-_ ]?secret/i;
@@ -156,7 +156,7 @@ export async function gasRequest({ action, method = 'GET', body, fetchImpl, env 
           await new Promise((r) => setTimeout(r, 500 * attempt));
           continue;
         }
-        throw new SheetError(`Folha Inbound META indisponível (${redact(error.message || error)})`);
+        throw new SheetError(`Folha «${SHEET_TAB}» indisponível (${redact(error.message || error)})`);
       }
 
       const textBody = await response.text();
@@ -174,7 +174,7 @@ export async function gasRequest({ action, method = 'GET', body, fetchImpl, env 
       try {
         payload = JSON.parse(trimmed);
       } catch {
-        lastError = new SheetError('Resposta inválida da folha Inbound META');
+        lastError = new SheetError(`Resposta inválida da folha «${SHEET_TAB}»`);
         if (attempt < attempts) {
           await new Promise((r) => setTimeout(r, 500 * attempt));
           continue;
@@ -183,7 +183,7 @@ export async function gasRequest({ action, method = 'GET', body, fetchImpl, env 
       }
 
       if (!payload || payload.ok === false) {
-        const message = String(payload?.error || `Folha Inbound META HTTP ${response.status}`);
+        const message = String(payload?.error || `Folha «${SHEET_TAB}» HTTP ${response.status}`);
         const statusCode = /não encontrada|nao encontrada/i.test(message) ? 404 : 502;
         lastError = new SheetError(message, statusCode);
         if (attempt < attempts && statusCode >= 500) {
@@ -196,7 +196,7 @@ export async function gasRequest({ action, method = 'GET', body, fetchImpl, env 
       return payload;
     }
 
-    throw lastError || new SheetError('Folha Inbound META indisponível');
+    throw lastError || new SheetError(`Folha «${SHEET_TAB}» indisponível`);
   });
 }
 
@@ -214,7 +214,7 @@ export async function listInboundLeads(options = {}) {
 
   const task = (async () => {
     const payload = await gasRequest({ action: 'leads', method: 'GET', ...options });
-    const leads = leadsFromPayload(payload);
+    const leads = filterLeadsForApp(leadsFromPayload(payload));
     listCache = { at: Date.now(), value: leads };
     return { leads, configured: true };
   })();

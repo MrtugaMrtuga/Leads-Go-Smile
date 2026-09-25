@@ -76,7 +76,7 @@ const Admin: React.FC<AdminProps> = ({
               onChange={(e) => onUpdateSettings({ commissionPercent: Number(e.target.value) })}
             />
           </label>
-          <p className="sub">Folha Inbound META · API /api · leads.evob.org</p>
+          <p className="sub">Folha Leads (2024 - 2026) · API /api · leads.evob.org</p>
           <div className="list">
             <div className="row">
               <span className="row-main">

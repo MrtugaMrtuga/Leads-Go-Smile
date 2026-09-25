@@ -2,7 +2,7 @@ import express from 'express';
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { SHEET_TAB } from '../shared/inboundMeta.js';
+import { CONTACT_CUTOFF_DAY, SHEET_TAB } from '../shared/inboundMeta.js';
 import {
   appsScriptConfig,
   createInboundLead,
@@ -125,7 +125,7 @@ function sanitizeLeadInput(raw = {}) {
 
 function sendSheetError(res, error) {
   const status = error instanceof SheetError ? error.statusCode : 502;
-  const message = error?.message || 'Folha Inbound META indisponível';
+  const message = error?.message || `Folha «${SHEET_TAB}» indisponível`;
   res.status(status).json({ error: message });
 }
 
@@ -140,6 +140,8 @@ export function createApiRouter() {
       host: 'leads.evob.org',
       storage: 'apps-script',
       sheetTab: SHEET_TAB,
+      contactCutoff: CONTACT_CUTOFF_DAY,
+      contactCutoffTimeZone: 'Europe/Lisbon',
       configured: config.configured,
     });
   });
@@ -208,7 +210,7 @@ export function createApiRouter() {
   api.put('/leads/:id', patchLead);
 
   api.delete('/leads/:id', (_req, res) => {
-    res.status(405).json({ error: 'As linhas de Inbound META não se apagam por aqui.' });
+    res.status(405).json({ error: `As linhas de «${SHEET_TAB}» não se apagam por aqui.` });
   });
 
   api.get('/settings', async (_req, res) => {

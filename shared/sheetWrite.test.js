@@ -14,36 +14,36 @@ test('patch maps notes and status onto existing CRM columns only', () => {
   assert.equal(patch.note, 'liguei hoje');
   assert.equal(patch.status, 'contacted');
   const headers = patch.fields.map((field) => field.header);
-  assert.ok(headers.includes('Médico Orçamento Médico Tratamento'));
-  assert.ok(headers.includes('1º Contacto'));
+  assert.ok(headers.includes('Médico'));
+  assert.equal(headers.includes('1º Contacto'), false);
   assert.equal(headers.includes('O que gostaria de melhorar no seu sorriso?'), false);
+  assert.equal(headers.includes('Comentários'), false);
   assert.equal(headers.includes('Observações'), false);
-  const contact = patch.fields.find((field) => field.header === '1º Contacto');
-  assert.equal(contact.ifBlank, true);
-  assert.equal(contact.value, NOW.toISOString());
-  assert.equal(patch.fields.find((field) => field.header === 'Legenda').value, 'Em processamento');
+  assert.equal(patch.fields.find((field) => field.header === 'Estado').value, 'Em processamento');
 });
 
-test('status without a new note does not replace Observações', () => {
+test('status without a new note does not replace Comentários', () => {
   const patch = leadPatchToFields({ status: 'paid', estado: 'PAGO' }, NOW);
   assert.equal(patch.noteSet, false);
   assert.equal(patch.status, 'paid');
   assert.equal(patch.fields.find((field) => field.header === 'Pagamento').value, 'Pago');
-  assert.equal(patch.fields.some((field) => field.header === 'Legenda'), false);
+  assert.equal(patch.fields.some((field) => field.header === 'Estado'), false);
 });
 
-test('unknown and meta columns are dropped; explicit CRM keys pass', () => {
+test('unknown columns are dropped; aliases write the canonical headers', () => {
   const patch = leadPatchToFields({
     fields: {
       Descartadas: 'x',
       'O que gostaria de melhorar no seu sorriso?': 'branquear_dentes',
       'Nº paciente': '42',
       'Observações#2': 'nota final',
+      Observações: 'nota visível',
     },
   });
   const headers = patch.fields.map((field) => `${field.header}#${field.occurrence}`);
-  assert.deepEqual(headers, ['Nº paciente#1', 'Observações#2']);
-  assert.equal(patch.noteSet, false);
+  assert.deepEqual(headers, ['Nº Paciente Definitivo#1']);
+  assert.equal(patch.noteSet, true);
+  assert.equal(patch.note, 'nota visível');
 });
 
 test('merge keeps the previous note when the UI only changes status', () => {
@@ -57,12 +57,12 @@ test('merge keeps the previous note when the UI only changes status', () => {
   );
 });
 
-test('não atendeu marks processing, stamps first contact, and writes Legenda', () => {
+test('não atendeu marks processing and writes Estado', () => {
   const patch = leadPatchToFields({ status: 'processing', isContacted: true }, NOW);
   assert.equal(patch.status, 'processing');
   assert.equal(patch.noteSet, false);
-  assert.equal(patch.fields.find((field) => field.header === 'Legenda').value, 'Em processamento');
-  assert.equal(patch.fields.find((field) => field.header === '1º Contacto').ifBlank, true);
+  assert.equal(patch.fields.find((field) => field.header === 'Estado').value, 'Em processamento');
+  assert.equal(patch.fields.some((field) => field.header === '1º Contacto'), false);
   assert.equal(patch.fechoClear, true);
   assert.equal(patch.fields.find((field) => field.header === 'Data fecho').value, '');
 });
@@ -72,7 +72,7 @@ test('free move Marcada ↔ Em processamento writes only the pipeline columns', 
   assert.equal(back.status, 'processing');
   assert.equal(back.noteSet, false);
   assert.equal(back.motivoSet, false);
-  assert.equal(back.fields.find((field) => field.header === 'Legenda').value, 'Em processamento');
+  assert.equal(back.fields.find((field) => field.header === 'Estado').value, 'Em processamento');
   assert.equal(back.fechoClear, true);
   assert.equal(back.fields.find((field) => field.header === 'Data fecho').value, '');
   assert.equal(back.fields.some((field) => field.header === 'Data Primeira Consulta'), false);
@@ -80,7 +80,7 @@ test('free move Marcada ↔ Em processamento writes only the pipeline columns', 
   const forward = leadPatchToFields({ status: 'scheduled' }, NOW);
   assert.equal(forward.status, 'scheduled');
   assert.equal(forward.noteSet, false);
-  assert.equal(forward.fields.find((field) => field.header === 'Legenda').value, 'Marcada');
+  assert.equal(forward.fields.find((field) => field.header === 'Estado').value, 'Marcada');
   assert.equal(forward.fields.some((field) => field.header === 'Data Primeira Consulta'), false);
   assert.equal(forward.fields.find((field) => field.header === 'Data fecho').ifBlank, true);
   assert.equal(
@@ -95,9 +95,9 @@ test('free move Marcada ↔ Em processamento writes only the pipeline columns', 
   );
 });
 
-test('booking writes Legenda Marcada', () => {
+test('booking writes Estado Marcada', () => {
   const patch = leadPatchToFields({ status: 'scheduled', appointmentDate: '2026-09-22T10:00' }, NOW);
-  assert.equal(patch.fields.find((field) => field.header === 'Legenda').value, 'Marcada');
+  assert.equal(patch.fields.find((field) => field.header === 'Estado').value, 'Marcada');
   assert.equal(patch.fields.find((field) => field.header === 'Data Primeira Consulta').value, '2026-09-22T10:00');
   const fecho = patch.fields.find((field) => field.header === 'Data fecho');
   assert.equal(fecho.value, NOW.toISOString());
@@ -105,14 +105,14 @@ test('booking writes Legenda Marcada', () => {
   assert.equal(patch.fecho, NOW.toISOString());
 });
 
-test('discard requires a motivo and stores it beside Legenda', () => {
+test('discard requires a motivo and stores it beside Estado', () => {
   assert.throws(() => leadPatchToFields({ status: 'discarded', notes: '   ' }, NOW), /Motivo é obrigatório/);
   const patch = leadPatchToFields({ status: 'discarded', motivo: 'não interessa' }, NOW);
   assert.equal(patch.status, 'discarded');
   assert.equal(patch.motivo, 'não interessa');
   assert.equal(patch.motivoSet, true);
   assert.equal(patch.noteSet, false);
-  assert.equal(patch.fields.find((field) => field.header === 'Legenda').value, 'Descartada');
+  assert.equal(patch.fields.find((field) => field.header === 'Estado').value, 'Descartada');
   assert.equal(patch.fields.find((field) => field.header === 'Data fecho').ifBlank, true);
   assert.equal(
     mergeObservacoes('[status:contacted]\nliguei ontem', {
