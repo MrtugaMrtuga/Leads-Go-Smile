@@ -1,91 +1,68 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  CONTACT_CUTOFF_DAY,
+  SHEET_TAB,
   closeEvolution,
   closeWindow,
+  contactDayFromText,
   filledLeadFields,
+  filterLeadsForApp,
   humanizeMetaValue,
   listBucket,
   mapDataToLeads,
-  nextPipelineStatus,
   mapSheetCsv,
+  nextPipelineStatus,
   pipelineBreakdown,
   pipelineStats,
   pipelineTone,
   sortLeadsNewestFirst,
+  syncLeadKey,
 } from './inboundMeta.js';
 
 const HEADERS = [
-  'Data Contacto',
-  'Nome Paciente',
+  'timestamp',
+  'Origem',
+  'Nome',
+  'Email',
   'Telefone',
-  'E-mail',
-  'O que gostaria de melhorar no seu sorriso?',
-  'Que tipo de tratamento está a considerar?',
-  'Em que fase está neste momento?',
-  'Quando gostaria de avançar?',
-  'Já conhece ou foi acompanhado na Go Smile?',
-  'Como prefere que a equipa entre em contacto consigo?',
-  '1º Contacto',
-  'Data 2º Contacto',
-  '2º Contacto',
-  'Observações',
+  'Responsável',
+  'Data Contacto',
+  'Comentários',
   'Data Primeira Consulta',
+  'Médico',
+  'Nº Paciente Definitivo',
+  'Estado',
   'Data Próxima Consulta',
-  'Nº paciente',
-  'Localização',
-  'Idade',
-  'Realizada',
-  'Médico Orçamento Médico Tratamento',
   'Orçamentado',
   'Pagamento',
   'Financiamento',
   'Valor Real Bruto',
-  'Legenda',
-  '',
-  'Facebook',
-  'Google Ads',
-  'Instagram',
-  'Messenger',
-  'Website',
-  'Observações',
+  'O que gostaria de melhorar no seu sorriso?',
 ];
 
-const EXAMPLE = [
-  '2026-09-20T17:14:04.000Z',
-  'Ida Cristina Albuquerque Malho Rodrigues de Oliveira',
-  '351962852158',
-  'cristina.oliveira.consult@gmail.com',
-  'substituir_dentes_em_falta',
-  'outro_tratamento',
-  'quero_marcar_uma_consulta',
-  'o_mais_rapidamente_possível',
-  'não,_seria_a_primeira_vez',
-  'whatsapp',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  '',
-  'nota final da clínica',
-];
+const IDA = {
+  timestamp: '2026-09-20T16:14:04.000Z',
+  Origem: 'Meta',
+  Nome: 'Ida Cristina Albuquerque Malho Rodrigues de Oliveira',
+  Email: 'cristina.oliveira.consult@gmail.com',
+  Telefone: '351962852158',
+  'Data Contacto': '2026-09-20T17:14:04.000Z',
+  Comentários: 'nota da clínica',
+  'O que gostaria de melhorar no seu sorriso?': 'substituir_dentes_em_falta',
+};
+
+function rowFrom(cells) {
+  const row = HEADERS.map(() => '');
+  Object.entries(cells).forEach(([header, value]) => {
+    const index = HEADERS.indexOf(header);
+    if (index < 0) throw new Error(`Cabeçalho em falta: ${header}`);
+    row[index] = value;
+  });
+  return row;
+}
+
+const EXAMPLE = rowFrom(IDA);
 
 function toCsv(rows) {
   return rows
@@ -104,58 +81,53 @@ test('humanize turns Meta snake_case into readable Portuguese', () => {
   assert.equal(humanizeMetaValue('351962852158'), '351962852158');
 });
 
-test('mapSheetCsv keeps every filled Inbound META field and hides empties', () => {
+test('mapSheetCsv keeps filled Leads (2024 - 2026) fields and hides empties', () => {
   const [lead] = mapSheetCsv(toCsv([HEADERS, EXAMPLE]));
   assert.ok(lead);
-  assert.equal(lead.sourceTab, 'Inbound META');
+  assert.equal(SHEET_TAB, 'Leads (2024 - 2026)');
+  assert.equal(lead.sourceTab, 'Leads (2024 - 2026)');
+  assert.equal(lead.source, 'Meta');
   assert.equal(lead.name, 'Ida Cristina Albuquerque Malho Rodrigues de Oliveira');
   assert.equal(lead.phone, '351962852158');
   assert.equal(lead.email, 'cristina.oliveira.consult@gmail.com');
   assert.equal(lead.id, '2');
   assert.equal(lead.nome, lead.name);
   assert.equal(lead.telefone, lead.phone);
-  assert.equal(lead.dataContacto, lead.timestamp);
-  assert.equal(lead.notes, 'nota final da clínica');
-  assert.equal(lead.crm.observacoes_final, 'nota final da clínica');
+  assert.equal(lead.contactDay, '2026-09-20');
+  assert.equal(lead.notes, 'nota da clínica');
+  assert.equal(lead.crm.observacoes, 'nota da clínica');
+  assert.equal(lead.crm.estado, '');
 
   const labels = lead.formFields.map((field) => field.label);
   assert.ok(labels.includes('O que gostaria de melhorar no seu sorriso?'));
-  assert.ok(labels.includes('Que tipo de tratamento está a considerar?'));
-  assert.ok(labels.includes('Em que fase está neste momento?'));
-  assert.ok(labels.includes('Quando gostaria de avançar?'));
-  assert.ok(labels.includes('Já conhece ou foi acompanhado na Go Smile?'));
-  assert.ok(labels.includes('Como prefere que a equipa entre em contacto consigo?'));
-  assert.equal(labels.filter((label) => label === 'Observações').length, 1);
+  assert.ok(labels.includes('Origem'));
+  assert.ok(labels.includes('Comentários'));
+  assert.equal(labels.includes('Observações'), false);
   assert.equal(lead.formFields.some((field) => field.value === ''), false);
-  assert.equal(lead.formFields.some((field) => field.key === 'facebook'), false);
 
   const visible = filledLeadFields(lead);
   const byLabel = Object.fromEntries(visible.map((field) => [field.label, field.value]));
   assert.equal(byLabel['O que gostaria de melhorar no seu sorriso?'], 'Substituir dentes em falta');
-  assert.equal(byLabel['Que tipo de tratamento está a considerar?'], 'Outro tratamento');
-  assert.equal(byLabel['Em que fase está neste momento?'], 'Quero marcar uma consulta');
-  assert.equal(byLabel['Quando gostaria de avançar?'], 'O mais rapidamente possível');
-  assert.equal(byLabel['Já conhece ou foi acompanhado na Go Smile?'], 'Não, seria a primeira vez');
-  assert.equal(byLabel['Como prefere que a equipa entre em contacto consigo?'], 'Whatsapp');
+  assert.equal(byLabel.Origem, 'Meta');
   assert.match(byLabel['Data Contacto'], /20\/09\/2026/);
   assert.match(byLabel['Data Contacto'], /18:14/);
-  assert.equal(byLabel['Observações'], 'Nota final da clínica');
+  assert.equal(byLabel['Comentários'], 'Nota da clínica');
 });
 
 test('mapDataToLeads reads sheet objects and preserves stored leads', () => {
   const [mapped] = mapDataToLeads([
     {
-      'Nome Paciente': 'Ana Exemplo',
+      '4': '2026-09-01T10:00:00.000Z',
+      Nome: 'Ana Exemplo',
       Telefone: '351910000000',
-      'E-mail': 'ana@example.com',
-      'Data Contacto': '2026-09-01T10:00:00.000Z',
+      Email: 'ana@example.com',
       'O que gostaria de melhorar no seu sorriso?': 'branquear_dentes',
-      'Que tipo de tratamento está a considerar?': '',
     },
   ]);
   assert.equal(mapped.formFields.length, 5);
+  assert.equal(mapped.contactDay, '2026-09-01');
   assert.equal(
-    filledLeadFields(mapped).find((field) => field.key === 'melhorar_sorriso').value,
+    filledLeadFields(mapped).find((field) => field.label === 'O que gostaria de melhorar no seu sorriso?').value,
     'Branquear dentes'
   );
 
@@ -178,8 +150,7 @@ test('mapDataToLeads reads sheet objects and preserves stored leads', () => {
 });
 
 test('status marker is authoritative and hidden from the detail fields', () => {
-  const row = [...EXAMPLE];
-  row[13] = '[status:contacted]\nliguei hoje';
+  const row = rowFrom({ ...IDA, Comentários: '[status:contacted]\nliguei hoje' });
   const [lead] = mapSheetCsv(toCsv([HEADERS, row]));
   assert.equal(lead.status, 'contacted');
   assert.equal(lead.notes, 'liguei hoje');
@@ -189,10 +160,12 @@ test('status marker is authoritative and hidden from the detail fields', () => {
   assert.equal(visible.some((field) => String(field.value).includes('[status:')), false);
 });
 
-test('pipeline markers survive reload and stay off the Meta detail', () => {
-  const row = [...EXAMPLE];
-  row[13] = '[status:discarded]\n[motivo:não interessa]\nliguei ontem';
-  row[25] = 'Descartada';
+test('pipeline markers survive reload and stay off the detail', () => {
+  const row = rowFrom({
+    ...IDA,
+    Comentários: '[status:discarded]\n[motivo:não interessa]\nliguei ontem',
+    Estado: 'Descartada',
+  });
   const [lead] = mapSheetCsv(toCsv([HEADERS, row]));
   assert.equal(lead.status, 'discarded');
   assert.equal(lead.discardReason, 'não interessa');
@@ -205,20 +178,20 @@ test('pipeline markers survive reload and stay off the Meta detail', () => {
   assert.equal(visible.find((field) => field.key === 'observacoes').value, 'Liguei ontem');
 });
 
-test('Legenda and não atendeu stay in the inbox as processing', () => {
-  const [fromLegenda] = mapSheetCsv(
+test('Estado and não atendeu stay in the inbox as processing', () => {
+  const [fromEstado] = mapSheetCsv(
     toCsv([
-      ['Nome Paciente', 'Legenda'],
+      ['Nome', 'Estado'],
       ['Ana Sem Atender', 'Em processamento'],
     ])
   );
-  assert.equal(fromLegenda.status, 'processing');
-  assert.equal(listBucket(fromLegenda.status), 'inbox');
-  assert.equal(pipelineTone(fromLegenda.status), 'yellow');
+  assert.equal(fromEstado.status, 'processing');
+  assert.equal(listBucket(fromEstado.status), 'inbox');
+  assert.equal(pipelineTone(fromEstado.status), 'yellow');
 
   const [fromNote] = mapSheetCsv(
     toCsv([
-      ['Nome Paciente', 'Observações'],
+      ['Nome', 'Comentários'],
       ['Bruno Não Atendeu', 'não atendeu à primeira chamada'],
     ])
   );
@@ -227,13 +200,32 @@ test('Legenda and não atendeu stay in the inbox as processing', () => {
 
   const [booked] = mapSheetCsv(
     toCsv([
-      ['Nome Paciente', 'Legenda'],
+      ['Nome', 'Estado'],
       ['Carla Marcada', 'Marcada'],
     ])
   );
   assert.equal(booked.status, 'scheduled');
   assert.equal(listBucket(booked.status), 'marcadas');
   assert.equal(pipelineTone(booked.status), 'green');
+});
+
+test('old Inbound META headers still map onto the historical columns', () => {
+  const [lead] = mapSheetCsv(
+    toCsv([
+      ['4', 'Nome Paciente', 'E-mail', 'Telefone', 'Observações', 'Legenda', 'Médico Orçamento Médico Tratamento', 'Nº paciente', 'Data Contacto'],
+      ['2026-09-23 22:15:37', 'Ana Antiga', 'ana@example.com', '351910000000', 'liguei', 'Marcada', 'Bruno Aires', '42', '04.10.24 - 12h'],
+    ])
+  );
+  assert.equal(lead.name, 'Ana Antiga');
+  assert.equal(lead.email, 'ana@example.com');
+  assert.equal(lead.notes, 'liguei');
+  assert.equal(lead.status, 'scheduled');
+  assert.equal(lead.doctor, 'Bruno Aires');
+  assert.equal(lead.crm.numero_paciente, '42');
+  assert.equal(lead.contactDay, '2026-09-23');
+  assert.equal(lead.formFields.find((field) => field.key === 'nome').label, 'Nome');
+  assert.equal(lead.formFields.find((field) => field.key === 'observacoes').label, 'Comentários');
+  assert.equal(lead.formFields.find((field) => field.key === 'estado').label, 'Estado');
 });
 
 test('estatísticas are percentages of every lead', () => {
@@ -275,9 +267,11 @@ test('estatísticas are percentages of every lead', () => {
   assert.equal(nextPipelineStatus('discarded'), '');
 });
 
-test('fecho date is read from the column or the Observações marker', () => {
-  const row = [...EXAMPLE];
-  row[13] = '[status:scheduled]\n[fecho:2026-09-21T22:00:00.000Z]\nconsulta';
+test('fecho date is read from the column or the Comentários marker', () => {
+  const row = rowFrom({
+    ...IDA,
+    Comentários: '[status:scheduled]\n[fecho:2026-09-21T22:00:00.000Z]\nconsulta',
+  });
   const [fromMarker] = mapSheetCsv(toCsv([HEADERS, row]));
   assert.equal(fromMarker.closedAt, '2026-09-21T22:00:00.000Z');
   assert.equal(fromMarker.notes, 'consulta');
@@ -373,7 +367,7 @@ test('lead lists put the newest Data Contacto first', () => {
 test('portuguese sheet dates stay on the contact day', () => {
   const [lead] = mapSheetCsv(
     toCsv([
-      ['Data Contacto', 'Nome Paciente'],
+      ['4', 'Nome'],
       ['20/09/2026 18:14', 'Ida Cristina'],
     ])
   );
@@ -381,4 +375,116 @@ test('portuguese sheet dates stay on the contact day', () => {
   assert.equal(date.getFullYear(), 2026);
   assert.equal(date.getMonth(), 8);
   assert.equal(date.getDate(), 20);
+  assert.equal(lead.contactDay, '2026-09-20');
+  assert.equal(contactDayFromText('31/08/2026 23:30'), '2026-08-31');
+  assert.equal(contactDayFromText('2026-08-31T23:30:00.000Z'), '2026-09-01');
+  assert.equal(contactDayFromText('2026-08-31T22:00:00.000Z'), '2026-08-31');
+  assert.equal(contactDayFromText('2024-10-03 22:15:37'), '2024-10-03');
+  assert.equal(contactDayFromText('04.10.24 - 12h'), '2024-10-04');
+  assert.equal(contactDayFromText('02.09.26 - 9h'), '2026-09-02');
+  assert.equal(contactDayFromText('23.09.2026'), '2026-09-23');
+  assert.equal(contactDayFromText('04-10-2024'), '2024-10-04');
+  assert.equal(contactDayFromText('23-09-2026'), '2026-09-23');
+});
+
+test('app list keeps column A on or after 2026-09-01', () => {
+  assert.equal(CONTACT_CUTOFF_DAY, '2026-09-01');
+  const leads = mapSheetCsv(
+    toCsv([
+      ['4', 'Nome', 'Data Contacto'],
+      ['2026-09-20T10:00:00.000Z', 'Dentro pelo timestamp e pela data', '2026-09-02'],
+      ['2026-09-15T10:00:00.000Z', 'Timestamp novo mas contacto antigo', '2026-08-20'],
+      ['2026-09-03T00:30:00.000Z', 'Só timestamp', ''],
+      ['2026-08-01T10:00:00.000Z', 'Antes do corte', ''],
+      ['', 'Sem data', ''],
+      ['2026-08-31T23:30:00.000Z', 'Véspera em UTC já é 1 de Setembro em Lisboa', ''],
+      ['2026-09-01', 'Dia do corte', ''],
+      ['2024-10-03 22:15:37', 'Data Contacto em Setembro não entra', '02.09.26 - 9h'],
+    ])
+  );
+  const names = filterLeadsForApp(leads).map((lead) => lead.name);
+  assert.deepEqual(names, [
+    'Dentro pelo timestamp e pela data',
+    'Timestamp novo mas contacto antigo',
+    'Só timestamp',
+    'Véspera em UTC já é 1 de Setembro em Lisboa',
+    'Dia do corte',
+  ]);
+  const both = leads.find((lead) => lead.name === 'Dentro pelo timestamp e pela data');
+  assert.equal(both.contactDay, '2026-09-20');
+  const preferred = leads.find((lead) => lead.name === 'Timestamp novo mas contacto antigo');
+  assert.equal(preferred.contactDay, '2026-09-15');
+  const oldStamp = leads.find((lead) => lead.name === 'Data Contacto em Setembro não entra');
+  assert.equal(oldStamp.contactDay, '2024-10-03');
+  assert.equal(filterLeadsForApp([oldStamp]).length, 0);
+});
+
+test('Drive sample reads column A as timestamp when the header is 4', () => {
+  const headers = [
+    '4',
+    'Origem',
+    'Nome',
+    'Email',
+    'Telefone',
+    'Responsável',
+    'Data Contacto',
+    'Comentários',
+    'Data Primeira Consulta',
+    'Médico',
+    'Nº Paciente Definitivo',
+    'Estado',
+    'Data Próxima Consulta',
+    'Orçamentado',
+    'Pagamento',
+    'Financiamento',
+    'Valor Real Bruto',
+  ];
+  const leads = mapSheetCsv(
+    toCsv([
+      headers,
+      ['2024-10-03 22:15:37', 'Meta', 'Histórica', 'a@b.pt', '351910000000', '', '04.10.24 - 12h', '', '', '', '', '', '', '', '', '', ''],
+      ['2026-09-23 22:15:37', 'Meta', 'Meta Nova', 'b@b.pt', '351920000000', '', '', '', '', '', '', '', '', '', '', '', ''],
+      ['2026-09-24 09:00:00', 'Meta', 'Sem data de contacto', 'c@b.pt', '351930000000', '', 'ver depois', '', '', '', '', '', '', '', '', '', ''],
+      ['2024-10-03 22:15:37', 'Orgânico', 'Contacto em Setembro', 'd@b.pt', '351940000000', '', '02.09.26 - 9h', '', '', '', '', '', '', '', '', '', ''],
+    ])
+  );
+  const byName = Object.fromEntries(leads.map((lead) => [lead.name, lead]));
+  assert.equal(byName.Histórica.contactDay, '2024-10-03');
+  assert.equal(byName['Meta Nova'].contactDay, '2026-09-23');
+  assert.equal(byName['Sem data de contacto'].contactDay, '2026-09-24');
+  assert.equal(byName['Contacto em Setembro'].contactDay, '2024-10-03');
+  assert.equal(byName.Histórica.formFields.some((field) => field.label === '4'), false);
+  assert.equal(byName['Sem data de contacto'].formFields.find((field) => field.key === 'data_contacto').value, 'ver depois');
+  assert.equal(byName.Histórica.origem || byName.Histórica.source, 'Meta');
+  assert.deepEqual(filterLeadsForApp(leads).map((lead) => lead.name), [
+    'Meta Nova',
+    'Sem data de contacto',
+  ]);
+
+  const [blankHeader] = mapSheetCsv(
+    toCsv([
+      ['', 'Nome', 'Data Contacto'],
+      ['2026-09-23 22:15:37', 'Cabeçalho vazio', ''],
+    ])
+  );
+  assert.equal(blankHeader.contactDay, '2026-09-23');
+
+  const [dataHeader] = mapSheetCsv(
+    toCsv([
+      ['Data', 'Nome'],
+      ['2026-09-05 08:00:00', 'Coluna Data'],
+    ])
+  );
+  assert.equal(dataHeader.contactDay, '2026-09-05');
+});
+
+test('sync key ignores phone punctuation and keeps the Lisbon day', () => {
+  assert.equal(
+    syncLeadKey({ nome: 'Ana', telefone: '+351 910 000 000', email: 'A@B.pt', contactDay: '2026-09-01' }),
+    '351910000000|ana|2026-09-01'
+  );
+  assert.equal(
+    syncLeadKey({ nome: 'Ana', telefone: '', email: 'A@B.pt', contactDay: '2026-09-01' }),
+    'a@b.pt|ana|2026-09-01'
+  );
 });

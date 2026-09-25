@@ -1,83 +1,60 @@
 /**
- * Inbound META column map (sheet tab "Inbound META") and lead mapping.
+ * Column map for the live tab «Leads (2024 - 2026)» and lead mapping.
+ * Headers match by fold, then by alias (Nome Paciente, E-mail, Observações, Legenda, …).
  * Values stay raw here; the UI humanizes snake_case for display.
  *
  * SHEET_ID is the sheet bound to the live Apps Script /exec.
  * Daniel's sheet 1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w (Constant Circle)
- * is the Meta inbound / sync source, not this ID. Nothing in the Node server reads SHEET_ID.
+ * is not this ID. Tab setup and sync live outside this project.
+ * Nothing in the Node server reads SHEET_ID.
+ *
+ * App lists include a row only when column A (the ISO timestamp) is on or after
+ * CONTACT_CUTOFF_DAY (Europe/Lisbon). The live header of that column is the literal "4".
+ * Data Contacto is CRM free text and does not decide the list. Updates by row id
+ * are not dropped by this cutoff.
  */
 
 export const SHEET_ID = '1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8';
-export const SHEET_TAB = 'Inbound META';
+export const DANIEL_SHEET_ID = '1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w';
+export const SHEET_TAB = 'Leads (2024 - 2026)';
+
+/** Inclusive Lisbon calendar day. Rows before this do not appear in GET /api/leads. */
+export const CONTACT_CUTOFF_DAY = '2026-09-01';
 
 export const COLUMN_DEFS = [
-  { key: 'data_contacto', header: 'Data Contacto' },
-  { key: 'nome', header: 'Nome Paciente' },
+  { key: 'timestamp_col', header: 'timestamp', aliases: ['4', 'Timestamp', 'Data', 'Carimbo de data/hora'] },
+  { key: 'origem', header: 'Origem' },
+  { key: 'nome', header: 'Nome', aliases: ['Nome Paciente', 'Nome do paciente'] },
+  { key: 'email', header: 'Email', aliases: ['E-mail', 'E-Mail'] },
   { key: 'telefone', header: 'Telefone' },
-  { key: 'email', header: 'E-mail' },
-  { key: 'melhorar_sorriso', header: 'O que gostaria de melhorar no seu sorriso?', meta: true },
-  { key: 'tipo_tratamento', header: 'Que tipo de tratamento está a considerar?', meta: true },
-  { key: 'fase', header: 'Em que fase está neste momento?', meta: true },
-  { key: 'quando', header: 'Quando gostaria de avançar?', meta: true },
-  { key: 'conhece', header: 'Já conhece ou foi acompanhado na Go Smile?', meta: true },
-  { key: 'preferencia_contacto', header: 'Como prefere que a equipa entre em contacto consigo?', meta: true },
-  { key: 'primeiro_contacto', header: '1º Contacto' },
-  { key: 'data_segundo_contacto', header: 'Data 2º Contacto' },
-  { key: 'segundo_contacto', header: '2º Contacto' },
-  { key: 'observacoes', header: 'Observações', occurrence: 1 },
+  { key: 'responsavel', header: 'Responsável', aliases: ['Responsavel'] },
+  { key: 'data_contacto', header: 'Data Contacto', aliases: ['Data de contacto'] },
+  { key: 'observacoes', header: 'Comentários', aliases: ['Comentarios', 'Observações', 'Observacoes'], occurrence: 1 },
   { key: 'data_primeira_consulta', header: 'Data Primeira Consulta' },
+  { key: 'medico_orcamento', header: 'Médico', aliases: ['Medico', 'Médico Orçamento Médico Tratamento'] },
+  { key: 'numero_paciente', header: 'Nº Paciente Definitivo', aliases: ['Nº paciente', 'Nº Paciente', 'Numero Paciente Definitivo'] },
+  { key: 'estado', header: 'Estado', aliases: ['Legenda'] },
   { key: 'data_proxima_consulta', header: 'Data Próxima Consulta' },
-  { key: 'numero_paciente', header: 'Nº paciente' },
-  { key: 'localizacao', header: 'Localização' },
-  { key: 'idade', header: 'Idade' },
-  { key: 'realizada', header: 'Realizada' },
-  { key: 'medico_orcamento', header: 'Médico Orçamento Médico Tratamento' },
   { key: 'orcamentado', header: 'Orçamentado' },
   { key: 'pagamento', header: 'Pagamento' },
   { key: 'financiamento', header: 'Financiamento' },
   { key: 'valor_real_bruto', header: 'Valor Real Bruto' },
-  { key: 'legenda', header: 'Legenda' },
-  { key: 'facebook', header: 'Facebook', channel: true },
-  { key: 'google_ads', header: 'Google Ads', channel: true },
-  { key: 'instagram', header: 'Instagram', channel: true },
-  { key: 'messenger', header: 'Messenger', channel: true },
-  { key: 'website', header: 'Website', channel: true },
-  { key: 'observacoes_final', header: 'Observações', occurrence: 2 },
   { key: 'data_fecho', header: 'Data fecho' },
 ];
 
-const CHANNELS = [
-  ['facebook', 'Facebook'],
-  ['google_ads', 'Google Ads'],
-  ['instagram', 'Instagram'],
-  ['messenger', 'Messenger'],
-  ['website', 'Website'],
-];
-
-/** CRM columns that the app may write. Meta question columns stay read-only. */
+/** CRM columns the app may write on «Leads (2024 - 2026)». */
 export const CRM_KEYS = [
-  'primeiro_contacto',
-  'data_segundo_contacto',
-  'segundo_contacto',
+  'responsavel',
   'observacoes',
   'data_primeira_consulta',
   'data_proxima_consulta',
   'numero_paciente',
-  'localizacao',
-  'idade',
-  'realizada',
   'medico_orcamento',
   'orcamentado',
   'pagamento',
   'financiamento',
   'valor_real_bruto',
-  'legenda',
-  'facebook',
-  'google_ads',
-  'instagram',
-  'messenger',
-  'website',
-  'observacoes_final',
+  'estado',
   'data_fecho',
 ];
 
@@ -170,6 +147,19 @@ export function statusFromLegenda(value) {
   if (folded === 'em processamento') return 'processing';
   if (folded === 'marcada' || folded === 'marcado') return 'scheduled';
   if (folded === 'descartada' || folded === 'descartado') return 'discarded';
+  return '';
+}
+
+/** Estado on the historical tab, with the same pipeline words as Legenda plus common CRM labels. */
+export function statusFromEstado(value) {
+  const fromPipeline = statusFromLegenda(value);
+  if (fromPipeline) return fromPipeline;
+  const folded = foldHeader(value);
+  if (folded === 'pago' || folded === 'paga' || folded === 'paid') return 'paid';
+  if (folded === 'fechado' || folded === 'fechada' || folded === 'concluida' || folded === 'concluido') return 'completed';
+  if (folded === 'nova' || folded === 'novo' || folded === 'new') return 'new';
+  if (folded === 'contactada' || folded === 'contactado' || folded === 'contacted') return 'contacted';
+  if (folded === 'positiva' || folded === 'positivo' || folded === 'positive') return 'positive';
   return '';
 }
 
@@ -269,6 +259,78 @@ export function lisbonDayKey(value) {
     month: '2-digit',
     day: '2-digit',
   }).format(date);
+}
+
+function fullYear(token) {
+  if (String(token).length === 4) return String(token);
+  const year = Number(token);
+  return String(year >= 70 ? 1900 + year : 2000 + year);
+}
+
+/**
+ * Lisbon calendar day for a contact cell.
+ * Unzoned ISO (`2024-10-03 22:15:37`, `YYYY-MM-DD`) keeps the written day.
+ * Instants with Z or a numeric offset convert to Europe/Lisbon.
+ * Portuguese day-first dates (`04.10.24 - 12h`, `DD/MM/YYYY`, `DD-MM-YYYY`) keep that day.
+ */
+export function contactDayFromText(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+
+  const isoPrefix = text.match(/^(\d{4})-(\d{2})-(\d{2})(.*)$/);
+  if (isoPrefix) {
+    const rest = isoPrefix[4] || '';
+    const hasZone = /[zZ]$/.test(text) || /[+-]\d{2}:?\d{2}$/.test(rest);
+    if (!hasZone) return `${isoPrefix[1]}-${isoPrefix[2]}-${isoPrefix[3]}`;
+    return lisbonDayKey(text);
+  }
+
+  const pt = text.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4}|\d{2})(?!\d)/);
+  if (pt) {
+    const dayNum = Number(pt[1]);
+    const monthNum = Number(pt[2]);
+    const year = fullYear(pt[3]);
+    if (monthNum < 1 || monthNum > 12 || dayNum < 1 || dayNum > 31) return '';
+    return `${year}-${pt[2].padStart(2, '0')}-${pt[1].padStart(2, '0')}`;
+  }
+
+  return lisbonDayKey(text);
+}
+
+/** Contact day for the app cutoff: column A only (header literally "4" on the live tab). */
+export function contactDayFromRaw(raw = {}) {
+  return contactDayFromText(raw.timestamp_col);
+}
+
+/** Column A text, for display and sorting. CRM Data Contacto is not this value. */
+export function contactSourceText(raw = {}) {
+  return String(raw.timestamp_col || '').trim();
+}
+
+export function leadContactDay(lead) {
+  if (lead && Object.prototype.hasOwnProperty.call(lead, 'contactDay')) return String(lead.contactDay || '');
+  return contactDayFromText(lead?.dataContacto || lead?.timestamp || '');
+}
+
+export function leadOnOrAfterContactCutoff(lead) {
+  const day = leadContactDay(lead);
+  return Boolean(day) && day >= CONTACT_CUTOFF_DAY;
+}
+
+/** Rows the live app may list. Writes by row id are separate and are not filtered here. */
+export function filterLeadsForApp(leads) {
+  return (Array.isArray(leads) ? leads : []).filter(leadOnOrAfterContactCutoff);
+}
+
+/**
+ * Stable row key: phone digits, else email, else folded name — plus folded name and the Lisbon contact day.
+ */
+export function syncLeadKey({ nome = '', telefone = '', email = '', contactDay = '' } = {}) {
+  const phone = String(telefone || '').replace(/\D/g, '');
+  const mail = String(email || '').trim().toLowerCase();
+  const name = foldHeader(nome);
+  const day = String(contactDay || '').trim();
+  return `${phone || mail || name}|${name}|${day}`;
 }
 
 function dayLabel(ymd) {
@@ -416,8 +478,6 @@ export function closeWindow(leads, spanDays = 30, now = new Date()) {
   };
 }
 
-const MARKS = new Set(['x', 'sim', 'yes', '1', 'true', '✓', '✔', '✅']);
-
 export function foldHeader(value) {
   return String(value ?? '')
     .trim()
@@ -527,10 +587,40 @@ function indexHeaders(headers) {
   });
 }
 
+function headerNames(def) {
+  return [def.header, ...(Array.isArray(def.aliases) ? def.aliases : [])];
+}
+
 function findColumn(indexed, def) {
-  const folded = foldHeader(def.header);
   const occurrence = def.occurrence || 1;
-  return indexed.find((column) => column.label && column.folded === folded && column.occurrence === occurrence);
+  for (const name of headerNames(def)) {
+    const folded = foldHeader(name);
+    const column = indexed.find((col) => col.label && col.folded === folded && col.occurrence === occurrence);
+    if (column) return column;
+  }
+  return undefined;
+}
+
+function isKnownNonTimestampHeader(folded) {
+  return COLUMN_DEFS.some((def) => {
+    if (def.key === 'timestamp_col') return false;
+    return headerNames(def).some((name) => foldHeader(name) === folded);
+  });
+}
+
+/** Column A is the timestamp when the header is Timestamp, Data, blank, or a numeric Drive label ("4"). */
+function claimTimestampColumn(indexed, cells, raw, used) {
+  if (String(raw.timestamp_col || '').trim()) return;
+  const named = indexed.find((col) => col.label && (col.folded === 'timestamp' || col.folded === 'data') && col.occurrence === 1);
+  const first = indexed.find((col) => col.index === 0);
+  let column = named;
+  if (!column && first) {
+    const loose = !first.folded || first.folded === 'timestamp' || first.folded === 'data' || /^\d+$/.test(first.folded);
+    if (loose || !isKnownNonTimestampHeader(first.folded)) column = first;
+  }
+  if (!column) return;
+  raw.timestamp_col = String(cells[column.index] ?? '').trim();
+  if (used) used.add(column.index);
 }
 
 function parseMoney(value) {
@@ -576,27 +666,21 @@ function metaExternalId(phone, email, timestamp) {
   return `meta:${phoneKey || emailKey || 'sem-contacto'}:${timestamp}`;
 }
 
-function channelSource(raw) {
-  for (const [key, label] of CHANNELS) {
-    const value = String(raw[key] || '').trim();
-    if (!value) continue;
-    if (MARKS.has(value.toLowerCase())) return label;
-    return value;
-  }
-  return 'Inbound META';
+function leadSource(raw) {
+  return String(raw.origem || '').trim();
 }
 
 function inferInboundStatus(raw) {
   const primary = splitStatusNote(raw.observacoes);
   if (LEAD_STATUSES.includes(primary.status)) return primary.status;
 
-  const fromLegenda = statusFromLegenda(raw.legenda);
-  if (fromLegenda) return fromLegenda;
+  const fromEstado = statusFromEstado(raw.estado);
+  if (fromEstado) return fromEstado;
 
   const pagamento = foldHeader(raw.pagamento);
   if (pagamento === 'pago' || pagamento === 'paga' || pagamento === 'paid') return 'paid';
 
-  const notes = `${primary.note} ${raw.observacoes_final || ''}`.toLowerCase();
+  const notes = String(primary.note || '').toLowerCase();
   const orcamento = foldHeader(raw.orcamentado);
   if (
     notes.includes('venda fechada') ||
@@ -624,7 +708,7 @@ function inferInboundStatus(raw) {
   ) {
     return 'discarded';
   }
-  if (String(raw.primeiro_contacto || '').trim() || notes.includes('contactad')) return 'contacted';
+  if (String(raw.responsavel || '').trim() || notes.includes('contactad')) return 'contacted';
   return 'new';
 }
 
@@ -638,11 +722,14 @@ function mapRow(indexed, cells, sheetRow) {
     raw[def.key] = value;
     if (column) used.add(column.index);
   });
+  claimTimestampColumn(indexed, cells, raw, used);
 
   const name = raw.nome;
   if (!name) return null;
 
-  const timestamp = parseTimestamp(raw.data_contacto);
+  const contactText = contactSourceText(raw);
+  const contactDay = contactDayFromRaw(raw);
+  const timestamp = contactText ? parseTimestamp(contactText) : new Date().toISOString();
   const primary = splitStatusNote(raw.observacoes);
   const formFields = [];
 
@@ -664,7 +751,7 @@ function mapRow(indexed, cells, sheetRow) {
   });
 
   const status = inferInboundStatus(raw);
-  const notes = primary.note || raw.observacoes_final || '';
+  const notes = primary.note || '';
   const crm = {};
   CRM_KEYS.forEach((key) => {
     crm[key] = key === 'observacoes' ? primary.note : raw[key] || '';
@@ -683,6 +770,7 @@ function mapRow(indexed, cells, sheetRow) {
     telefone: raw.telefone || '',
     email: raw.email || '',
     dataContacto: timestamp,
+    contactDay,
     name,
     phone: raw.telefone || '',
     timestamp,
@@ -694,7 +782,7 @@ function mapRow(indexed, cells, sheetRow) {
     doctor: raw.medico_orcamento || '',
     appointmentDate: raw.data_primeira_consulta || '',
     value: parseMoney(raw.valor_real_bruto),
-    source: channelSource(raw),
+    source: leadSource(raw),
     sourceTab: SHEET_TAB,
     formFields,
     crm,
@@ -781,9 +869,9 @@ export function mapDataToLeads(data) {
   return data
     .map((item, index) => {
       if (!item || typeof item !== 'object' || Array.isArray(item)) return null;
-      const isSheetRow =
-        Object.prototype.hasOwnProperty.call(item, 'Nome Paciente') ||
-        Object.prototype.hasOwnProperty.call(item, 'O que gostaria de melhorar no seu sorriso?');
+      const isSheetRow = ['Nome', 'Nome Paciente', 'Origem', 'Comentários', 'Observações', 'Estado', 'Email', 'E-mail'].some(
+        (key) => Object.prototype.hasOwnProperty.call(item, key)
+      );
       if (isSheetRow) {
         const headers = Object.keys(item);
         const cells = headers.map((key) => item[key]);

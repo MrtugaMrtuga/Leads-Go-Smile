@@ -1,9 +1,11 @@
 /**
- * Maps an app patch onto existing Inbound META headers.
- * Unknown headers are dropped. Meta form questions are not overwritten.
+ * Maps an app patch onto «Leads (2024 - 2026)» headers.
+ * Unknown headers are dropped. Aliases (Observações, Legenda, Nº paciente, …)
+ * write the canonical header. The Apps Script resolves that header back to
+ * an existing alias column when the canonical name is absent.
  */
 
-import { COLUMN_DEFS, CRM_KEYS, cleanMotivo, legendaForStatus, splitStatusNote } from './inboundMeta.js';
+import { COLUMN_DEFS, CRM_KEYS, cleanMotivo, foldHeader, legendaForStatus, splitStatusNote } from './inboundMeta.js';
 
 const WRITABLE = new Set(CRM_KEYS);
 const STATUSES = new Set(['new', 'contacted', 'processing', 'discarded', 'scheduled', 'positive', 'completed', 'paid']);
@@ -40,14 +42,21 @@ function writableByKey(key) {
   return COLUMN_DEFS.find((def) => def.key === key) || null;
 }
 
+function namesFor(def) {
+  return [def.header, ...(Array.isArray(def.aliases) ? def.aliases : [])];
+}
+
 function writableByHeader(token) {
   const match = String(token || '').match(/^(.*)#(\d+)$/);
   const header = (match ? match[1] : String(token || '')).trim();
   const occurrence = match ? Number(match[2]) : 1;
+  const folded = foldHeader(header);
   return (
-    COLUMN_DEFS.find(
-      (def) => def.header === header && (def.occurrence || 1) === occurrence && WRITABLE.has(def.key)
-    ) || null
+    COLUMN_DEFS.find((def) => {
+      if (!WRITABLE.has(def.key)) return false;
+      if ((def.occurrence || 1) !== occurrence) return false;
+      return namesFor(def).some((name) => foldHeader(name) === folded);
+    }) || null
   );
 }
 
@@ -116,13 +125,10 @@ export function leadPatchToFields(updates = {}, now = new Date()) {
     push(writableByKey('data_fecho'), '');
   }
 
-  if (status && status !== 'new') {
-    push(writableByKey('primeiro_contacto'), stamp, { ifBlank: true });
-  }
   if (status === 'paid') push(writableByKey('pagamento'), 'Pago');
   if (status === 'completed') push(writableByKey('orcamentado'), 'Fechado', { ifBlank: true });
-  const legenda = legendaForStatus(status);
-  if (legenda !== null) push(writableByKey('legenda'), legenda);
+  const estado = legendaForStatus(status);
+  if (estado !== null) push(writableByKey('estado'), estado);
 
   const crm = updates.crm && typeof updates.crm === 'object' && !Array.isArray(updates.crm) ? updates.crm : null;
   if (crm) {

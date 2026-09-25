@@ -1,11 +1,13 @@
-# Apps Script — Inbound META
+# Apps Script — Leads (2024 - 2026)
 
 Web app grátis, ligada à folha **Leads - Go Smile**. Não há projecto Google Cloud, conta de serviço nem billing.
 
 - Folha ligada ao Apps Script (live `/exec`): `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8`
-- Fonte Meta inbound / sync (Daniel, Constant Circle), não é a folha ligada: `1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`
-- Aba única: **Inbound META**
-- A aba «Leads (2024 - 2026)» não é lida nem escrita.
+- Folha de Daniel (Constant Circle), não ligada a este script: `1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`
+- Aba única: **Leads (2024 - 2026)** (nome exacto, com espaços)
+- A aba «Inbound META» não é lida nem escrita
+- Lista da app: data de contacto **>= 2026-09-01** (Europe/Lisbon)
+- Sync e população da aba ficam fora deste PR ([SYNC-DANIEL-EVOB.md](../SYNC-DANIEL-EVOB.md)). Etiqueta sugerida: `MacMini-leads-tab-2024-v1`
 
 O `/exec` em produção já está ligado à folha de cima. Este ficheiro regista esse ID. Não crie outra implementação por cima do URL live só para alinhar o repositório.
 
@@ -13,7 +15,7 @@ O Mini (Node, porta 3040) chama este `/exec` com o segredo. O browser nunca rece
 
 ## 1. Ligar o script à folha
 
-1. A folha ligada é `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8` (conta que a edita, de preferência brunoairesaugusto@gmail.com). A de daniel@constantcircle.co (`1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`) é só a fonte Meta inbound / sync.
+1. A folha ligada é `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8` (conta que a edita, de preferência brunoairesaugusto@gmail.com). A de daniel@constantcircle.co (`1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`) não é a folha deste script. Criar e encher a aba **Leads (2024 - 2026)** fica fora deste PR.
 2. **Extensões → Apps Script**.
 3. Apague o `Code.gs` de exemplo e cole [`Code.gs`](./Code.gs).
 4. Em **Definições do projecto → Mostrar ficheiro de manifesto**, confirme o [`appsscript.json`](./appsscript.json) (fuso `Europe/Lisbon`, runtime V8).
@@ -70,7 +72,7 @@ Devolve JSON com `leads` (objectos com `id` = número da linha, `nome`, `telefon
   "note": "liguei hoje",
   "noteSet": true,
   "fields": [
-    { "header": "1º Contacto", "occurrence": 1, "value": "2026-09-21T22:00:00.000Z", "ifBlank": true }
+    { "header": "Estado", "occurrence": 1, "value": "Em processamento" }
   ]
 }
 ```
@@ -81,23 +83,26 @@ As outras gravações só usam cabeçalhos que já existem. A excepção é **Da
 
 Não há variáveis novas no Mini. `APPS_SCRIPT_URL` e `APPS_SCRIPT_SECRET` chegam. A única coluna nova possível é **Data fecho**.
 
-| O quê | Onde na aba Inbound META | Valores |
+| O quê | Onde na aba Leads (2024 - 2026) | Valores |
 | --- | --- | --- |
-| Lista e cor | **Legenda** (já existia) | `Em processamento` (amarelo, fica na inbox), `Marcada` (verde, lista Marcadas), `Descartada` (vermelho, lista Descartadas). Vazio = nova, sem bola |
-| Estado da app | **Observações** (a primeira), prefixo `[status:…]` | `new`, `contacted`, `processing`, `discarded`, `scheduled`, `positive`, `completed`, `paid`. A UI não mostra o prefixo |
-| Motivo do descarte | **Observações** (a primeira), linha `[motivo:…]` | Obrigatório para passar a `discarded`. Sobrevive ao reload. A UI mostra o texto, não o marcador |
-| Contacto | **1º Contacto** | Data ISO na primeira vez que o estado deixa de ser `new`, incluindo «Não atendeu» |
-| Marcação | **Data Primeira Consulta** e **Médico Orçamento Médico Tratamento** | Já usados por Agendar, em conjunto com Legenda `Marcada` |
-| Data do fecho | **Data fecho** (criada na primeira gravação se a coluna não existir) e, na mesma célula de Observações, `[fecho:…]` | ISO de quando a lead saiu da inbox (marcada ou descartada). A primeira data mantém-se. Voltar à inbox apaga-a. Se faltar nas linhas antigas, a evolução usa a Data Contacto |
+| Lista e cor | **Estado** (aceita **Legenda** se for esse o cabeçalho) | `Em processamento` (amarelo, fica na inbox), `Marcada` (verde, lista Marcadas), `Descartada` (vermelho, lista Descartadas). Vazio = nova, sem bola |
+| Estado da app | **Comentários** (aceita **Observações**), prefixo `[status:…]` | `new`, `contacted`, `processing`, `discarded`, `scheduled`, `positive`, `completed`, `paid`. A UI não mostra o prefixo |
+| Motivo do descarte | **Comentários**, linha `[motivo:…]` | Obrigatório para passar a `discarded`. Sobrevive ao reload. A UI mostra o texto, não o marcador |
+| Nome, email, telefone, origem | **Nome** (ou Nome Paciente), **Email** (ou E-mail), **Telefone**, **Origem** | Leitura. O create grava a coluna A (cabeçalho `4`), Nome, Email, Telefone e Comentários |
+| Marcação | **Data Primeira Consulta** e **Médico** | Já usados por Agendar, em conjunto com Estado `Marcada` |
+| Corte da lista | **Coluna A** (cabeçalho literal `4`, timestamp ISO) com dia >= `2026-09-01` (Europe/Lisbon) | Só essas linhas entram em `action=leads`. Data Contacto não decide a lista. O update por id não usa este corte |
+| Data do fecho | **Data fecho** (criada na primeira gravação se a coluna não existir) e, na mesma célula de Comentários, `[fecho:…]` | ISO de quando a lead saiu da inbox (marcada ou descartada). A primeira data mantém-se. Voltar à inbox apaga-a. Se faltar nas linhas antigas, a evolução usa a Data Contacto |
 
 Na primeira vez que uma lead passa a marcada ou descartada, o script acrescenta o cabeçalho **Data fecho** no fim da linha 1, se ele ainda não existir. Não mexe nas outras colunas.
 
-«Não atendeu» grava `[status:processing]`, Legenda `Em processamento` e 1º Contacto. A lead continua na inbox. Descartar sem motivo é recusado (`Motivo é obrigatório para descartar`) e a linha não muda.
+«Não atendeu» grava `[status:processing]` e Estado `Em processamento`. A lead continua na inbox. Descartar sem motivo é recusado (`Motivo é obrigatório para descartar`) e a linha não muda.
 
-O toque **Marcada ↔ Em processamento** usa o mesmo `action: "update"`. Não cria colunas e não envia mensagem. `status: "scheduled"` grava Legenda `Marcada`, `[status:scheduled]` e **Data fecho** se ainda estiver vazia. `status: "processing"` grava Legenda `Em processamento`, `[status:processing]` e apaga **Data fecho**. A nota que já estava em Observações mantém-se (`noteSet` falso). Médico e data da consulta só mudam quando o pedido os traz (o fluxo Agendar).
+O toque **Marcada ↔ Em processamento** usa o mesmo `action: "update"`. Não cria colunas e não envia mensagem. `status: "scheduled"` grava Estado `Marcada`, `[status:scheduled]` e **Data fecho** se ainda estiver vazia. `status: "processing"` grava Estado `Em processamento`, `[status:processing]` e apaga **Data fecho**. A nota que já estava em Comentários mantém-se (`noteSet` falso). Médico e data da consulta só mudam quando o pedido os traz (o fluxo Agendar).
 
-Depois de colar este `Code.gs`: **Implementar → Gerir implementações → lápis → Nova versão**. O URL `/exec` mantém-se. Sem essa versão nova, o prefixo `processing` e o `[motivo:…]` não ficam gravados.
+Depois de colar este `Code.gs`: **Implementar → Gerir implementações → lápis → Nova versão**. O URL `/exec` mantém-se. Sem essa versão nova, a app continua na aba antiga.
 
-`Observações` (primeira) guarda a nota e, quando há estado da app, o prefixo `[status:…]`, que a UI não mostra. O motivo, quando existe, fica na linha seguinte.
+`Comentários` guarda a nota e, quando há estado da app, o prefixo `[status:…]`, que a UI não mostra. O motivo, quando existe, fica na linha seguinte. Se a folha ainda tiver **Observações** e não **Comentários**, a gravação cai nessa coluna.
 
-`action=create` acrescenta uma linha com Data Contacto, Nome Paciente, Telefone, E-mail e Observações.
+`action=create` acrescenta uma linha com o timestamp na coluna A (cabeçalho `4`), Nome, Telefone, Email e Comentários.
+
+`action=leads` omite linhas anteriores a 2026-09-01. `action=update` grava o id pedido na mesma.

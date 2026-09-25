@@ -2,7 +2,9 @@
 
 PWA de CRM para **https://leads.evob.org**, look **GoSmile V2-pt**, a correr no **Mac Mini** (Node na porta **3040**).
 
-A fonte de verdade é a Google Sheet `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8`, aba **Inbound META**, via Apps Script grátis (`/exec`). A folha de Daniel `1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w` é a fonte Meta inbound / sync, não a folha ligada ao script. Não há projecto Google Cloud, conta de serviço nem billing. A aba «Leads (2024 - 2026)» não é lida nem escrita. O histórico que estava em `data/leads.json` deixa de contar: no arranque o ficheiro fica `[]` e não volta a ser carregado.
+A fonte de verdade é a Google Sheet `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8`, aba **Leads (2024 - 2026)** (nome exacto, com espaços), via Apps Script grátis (`/exec`). A folha de Daniel `1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w` não é a folha ligada ao script. Não há projecto Google Cloud, conta de serviço nem billing. A aba «Inbound META» não é lida nem escrita. O histórico que estava em `data/leads.json` deixa de contar: no arranque o ficheiro fica `[]` e não volta a ser carregado.
+
+A lista da app (`GET /api/leads`) só inclui leads cuja **coluna A** (cabeçalho literal `4`, timestamp ISO) é em ou depois de **2026-09-01** (dia de calendário Europe/Lisbon). **Data Contacto** é texto de CRM e não decide a lista. Uma gravação por id de linha não depende deste corte. Sync e população da aba ficam fora deste PR ([SYNC-DANIEL-EVOB.md](./SYNC-DANIEL-EVOB.md)). Etiqueta sugerida: `MacMini-leads-tab-2024-v1`.
 
 O browser só fala com `/api` no mesmo origin. O segredo do Apps Script fica no Mini (`APPS_SCRIPT_SECRET`) e não entra no frontend.
 
@@ -10,9 +12,9 @@ PIN de acesso: **2000** (sessionStorage `gosmile-leads-unlocked`).
 
 ## Pipeline (Inbox, Marcadas, Descartadas)
 
-A cor ao lado do nome e as listas vêm da coluna **Legenda** e do prefixo em **Observações**. Não há variável nova no Mini. A única coluna que o script pode acrescentar é **Data fecho**.
+A cor ao lado do nome e as listas vêm da coluna **Estado** e do prefixo em **Comentários**. Não há variável nova no Mini. A única coluna que o script pode acrescentar é **Data fecho**.
 
-| UI | Legenda | Observações |
+| UI | Estado | Comentários |
 | --- | --- | --- |
 | Amarelo, inbox, «Não atendeu» ou contactada | `Em processamento` | `[status:processing]` ou `[status:contacted]` |
 | Verde, Marcadas (agendada) | `Marcada` | `[status:scheduled]` |
@@ -25,20 +27,20 @@ Em cada lista (Inbox, Marcadas, Descartadas e as outras) a lead com a Data Conta
 
 Na lista e na ficha, **Marcada** e **Em processamento** trocam nos dois sentidos com um toque. Não pede médico, data, nota nem mensagem. «Não atendeu» fica como está: amarelo, na inbox.
 
-O browser faz `PATCH /api/leads/:id` com `{ "status": "scheduled" }` ou `{ "status": "processing" }`. O Mini traduz isso no Apps Script já existente (`action: "update"` na aba **Inbound META**):
+O browser faz `PATCH /api/leads/:id` com `{ "status": "scheduled" }` ou `{ "status": "processing" }`. O Mini traduz isso no Apps Script (`action: "update"` na aba **Leads (2024 - 2026)**):
 
-| Toque | `status` | Legenda | Observações | Data fecho |
+| Toque | `status` | Estado | Comentários | Data fecho |
 | --- | --- | --- | --- | --- |
 | Em processamento → Marcada | `scheduled` | `Marcada` | o prefixo passa a `[status:scheduled]`; a nota anterior mantém-se | ISO de agora, só se a célula estiver vazia (`ifBlank`) |
 | Marcada → Em processamento | `processing` | `Em processamento` | o prefixo passa a `[status:processing]`; a nota anterior mantém-se | a célula é limpa, como quando a lead volta à inbox |
 
-Agendar pela ficha continua a gravar também **Data Primeira Consulta** e **Médico Orçamento Médico Tratamento**. O toque livre não mexe nessas colunas.
+Agendar pela ficha continua a gravar também **Data Primeira Consulta** e **Médico**. O toque livre não mexe nessas colunas.
 
 O separador **Estatísticas** mostra a evolução de marcações e fecho. O gráfico é uma linha (preto = marcações, madeira = fecho) para 7, 30 ou 90 dias em Europe/Lisbon; 90 dias agrupa por semana, à segunda. **Linha** ou **Barras**. Por baixo, três linhas: Marcações, Fecho (marcadas + descartadas) e Descartadas, com quantidade e percentagem face às entradas do período. A data do fecho é **Data fecho**; se uma lead antiga não a tiver, conta pela Data Contacto.
 
 O mapa completo está em [backend-gas/README.md](./backend-gas/README.md).
 
-Publicar uma versão nova do Apps Script depois deste código. `APPS_SCRIPT_URL` e `APPS_SCRIPT_SECRET` não mudam.
+Publicar uma versão nova do Apps Script depois deste código (`/exec`, nova versão). `APPS_SCRIPT_URL` e `APPS_SCRIPT_SECRET` não mudam. Reiniciar o Mini depois do pull.
 
 ## Arranque local
 
@@ -71,11 +73,11 @@ O servidor Express serve `dist/` e `/api` na mesma porta. Ver [DEPLOY.md](./DEPL
 | Método | Caminho | Descrição |
 | --- | --- | --- |
 | GET | `/api/health` | Estado. `storage` é `apps-script`; `configured` diz se o Mini tem URL e segredo |
-| GET | `/api/leads` | Leads da aba Inbound META (proxy server-side) |
+| GET | `/api/leads` | Leads da aba Leads (2024 - 2026) com data de contacto >= 2026-09-01 (proxy server-side) |
 | POST | `/api/sync/inbound-meta` | Já não importa CSV nem JSON. Devolve a contagem actual da folha |
 | POST | `/api/leads` | Acrescenta uma linha (nome, telefone, email, notas) |
 | GET | `/api/leads/:id` | Lê uma lead (`id` = número da linha) |
-| PATCH / PUT | `/api/leads/:id` | Grava CRM na mesma linha (observações, Legenda, motivo, contactos, consultas, médico, valor, pagamento). Descartar sem `motivo` responde 400 |
+| PATCH / PUT | `/api/leads/:id` | Grava CRM na mesma linha (Comentários, Estado, motivo, consultas, médico, valor, pagamento). Descartar sem `motivo` responde 400. O id é o número da linha, também para linhas fora da lista |
 | DELETE | `/api/leads/:id` | Recusado (405). As linhas da folha não se apagam por aqui |
 | GET / PUT | `/api/settings` | Comissão local |
 | GET / POST | `/api/reminders` | Lembretes só em disco |

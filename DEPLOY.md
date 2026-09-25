@@ -1,6 +1,6 @@
 # Deploy no Mac Mini — GoSmile Leads
 
-Alvo: **https://leads.evob.org** na porta **3040**, PWA instalável. As leads vivem na aba **Inbound META** (Apps Script). Comissão e lembretes continuam em disco.
+Alvo: **https://leads.evob.org** na porta **3040**, PWA instalável. As leads vivem na aba **Leads (2024 - 2026)** (Apps Script). Comissão e lembretes continuam em disco. Sync e população dessa aba ficam fora deste repositório.
 
 ## 1. Requisitos
 
@@ -36,7 +36,7 @@ Teste local:
 
 ```bash
 curl -s http://127.0.0.1:3040/api/health
-# {"ok":true,"app":"GoSmile Leads","host":"leads.evob.org","storage":"apps-script","sheetTab":"Inbound META","configured":true}
+# {"ok":true,"app":"GoSmile Leads","host":"leads.evob.org","storage":"apps-script","sheetTab":"Leads (2024 - 2026)","contactCutoff":"2026-09-01","configured":true}
 ```
 
 A UI e a API partilham a mesma origem. Não há projecto Google Cloud, conta de serviço nem Firebase. Sem `APPS_SCRIPT_URL` / `APPS_SCRIPT_SECRET`, a lista vem vazia (`configured: false`) em vez do JSON antigo.
@@ -105,7 +105,7 @@ No Safari ou Chrome, abra https://leads.evob.org, introduza o PIN **2000**, depo
 
 ## 7. Cópias de segurança
 
-A base das leads é a Google Sheet (aba Inbound META). `data/leads.json` é esvaziado no arranque e não deve ser restaurado como fonte. Faça backup de `data/settings.json` e `data/reminders.json` se quiser guardar comissão e lembretes.
+A base das leads é a Google Sheet (aba Leads (2024 - 2026), só coluna A >= 2026-09-01). `data/leads.json` é esvaziado no arranque e não deve ser restaurado como fonte. Faça backup de `data/settings.json` e `data/reminders.json` se quiser guardar comissão e lembretes. Sync e população da aba ficam fora deste PR.
 
 ```bash
 rsync -a data/settings.json data/reminders.json /Volumes/Backup/evault-leads-data/

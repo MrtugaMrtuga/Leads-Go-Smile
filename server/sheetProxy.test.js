@@ -4,7 +4,7 @@ import { request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const dataDir = await mkdtemp(join(tmpdir(), 'leads-sheet-'));
 process.env.LEADS_DATA_DIR = dataDir;
@@ -16,26 +16,31 @@ const { createApp } = await import('./index.js');
 
 const SECRET = 'mini-only-secret-value';
 const HEADERS = [
-  'Data Contacto',
-  'Nome Paciente',
+  '4',
+  'Origem',
+  'Nome',
+  'Email',
   'Telefone',
-  'E-mail',
-  'O que gostaria de melhorar no seu sorriso?',
-  'Observações',
+  'Data Contacto',
+  'Comentários',
+  'Estado',
 ];
 const IDA_VALUES = [
   '2026-09-20T17:14:04.000Z',
+  'Meta',
   'Ida Cristina Albuquerque Malho Rodrigues de Oliveira',
-  '351962852158',
   'cristina.oliveira.consult@gmail.com',
-  'substituir_dentes_em_falta',
+  '351962852158',
+  '2026-09-20T17:14:04.000Z',
+  '',
   '',
 ];
 
 function sheetPayload(values = IDA_VALUES, row = 2) {
   return {
     ok: true,
-    sheetTab: 'Inbound META',
+    sheetTab: 'Leads (2024 - 2026)',
+    contactCutoff: '2026-09-01',
     headers: HEADERS,
     rows: [{ row, values }],
     leads: [],
@@ -94,14 +99,16 @@ test('health reports the sheet proxy and an unconfigured Mini stays empty', asyn
   const app = createApp();
   const health = await call(app, 'GET', '/api/health');
   assert.equal(health.json.storage, 'apps-script');
-  assert.equal(health.json.sheetTab, 'Inbound META');
+  assert.equal(health.json.sheetTab, 'Leads (2024 - 2026)');
+  assert.equal(health.json.contactCutoff, '2026-09-01');
+  assert.equal(health.json.contactCutoffTimeZone, 'Europe/Lisbon');
   assert.equal(health.json.host, 'leads.evob.org');
   assert.equal(health.json.configured, false);
   const leads = await call(app, 'GET', '/api/leads');
   assert.deepEqual(leads.json, []);
 });
 
-test('listing uses Inbound META rows and ignores leads.json', async () => {
+test('listing uses Leads (2024 - 2026) rows on or after the cutoff and ignores leads.json', async () => {
   await writeFile(
     join(dataDir, 'leads.json'),
     `${JSON.stringify([{ id: '1106', name: 'Ana Rita Costa', phone: '351912334455' }])}\n`
@@ -113,21 +120,49 @@ test('listing uses Inbound META rows and ignores leads.json', async () => {
 
   await withFetch(async (url, init) => {
     calls.push({ url: String(url), method: init.method, redirect: init.redirect });
-    return new Response(JSON.stringify(sheetPayload()), {
+    const old = [...IDA_VALUES];
+    old[0] = '2026-08-15T10:00:00.000Z';
+    old[2] = 'Lead Antiga';
+    old[5] = '2026-08-15';
+    const stampOnly = [...IDA_VALUES];
+    stampOnly[0] = '2026-09-03T00:30:00.000Z';
+    stampOnly[2] = 'Só Timestamp';
+    stampOnly[5] = '';
+    const preferredOld = [...IDA_VALUES];
+    preferredOld[0] = '2026-09-20T10:00:00.000Z';
+    preferredOld[2] = 'Contacto Antigo';
+    preferredOld[5] = '2026-08-20';
+    const crmSeptember = [...IDA_VALUES];
+    crmSeptember[0] = '2024-10-03 22:15:37';
+    crmSeptember[2] = 'CRM Setembro';
+    crmSeptember[5] = '02.09.26 - 9h';
+    return new Response(JSON.stringify({
+      ...sheetPayload(),
+      rows: [
+        { row: 2, values: IDA_VALUES },
+        { row: 3, values: old },
+        { row: 4, values: stampOnly },
+        { row: 5, values: preferredOld },
+        { row: 6, values: crmSeptember },
+      ],
+    }), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     });
   }, async () => {
     const response = await call(app, 'GET', '/api/leads');
     assert.equal(response.status, 200);
-    assert.equal(response.json.length, 1);
-    assert.equal(response.json[0].name, 'Ida Cristina Albuquerque Malho Rodrigues de Oliveira');
-    assert.equal(response.json[0].id, '2');
-    assert.equal(response.json[0].sourceTab, 'Inbound META');
-    assert.equal(
-      response.json[0].formFields.some((field) => field.label === 'O que gostaria de melhorar no seu sorriso?'),
-      true
+    assert.equal(response.json.length, 3);
+    assert.deepEqual(
+      response.json.map((lead) => lead.name),
+      ['Ida Cristina Albuquerque Malho Rodrigues de Oliveira', 'Só Timestamp', 'Contacto Antigo']
     );
+    assert.equal(response.json[2].contactDay, '2026-09-20');
+    assert.equal(response.json[0].id, '2');
+    assert.equal(response.json[0].sourceTab, 'Leads (2024 - 2026)');
+    assert.equal(response.json[0].source, 'Meta');
+    assert.equal(response.json[0].contactDay, '2026-09-20');
+    assert.equal(response.json[1].contactDay, '2026-09-03');
     assert.equal(JSON.stringify(response.json).includes('Ana Rita'), false);
     assert.equal(response.text.includes(SECRET), false);
   });
@@ -143,14 +178,8 @@ test('CRM patch is posted to Apps Script and keeps the secret off the response',
   process.env.APPS_SCRIPT_SECRET = SECRET;
   const calls = [];
   const app = createApp();
-  const updated = [
-    '2026-09-20T17:14:04.000Z',
-    'Ida Cristina Albuquerque Malho Rodrigues de Oliveira',
-    '351962852158',
-    'cristina.oliveira.consult@gmail.com',
-    'substituir_dentes_em_falta',
-    '[status:contacted]\nliguei hoje',
-  ];
+  const updated = [...IDA_VALUES];
+  updated[6] = '[status:contacted]\nliguei hoje';
 
   await withFetch(async (url, init) => {
     calls.push({ url: String(url), method: init.method, body: init.body, redirect: init.redirect });
@@ -212,13 +241,13 @@ test('marking paid writes Pagamento and keeps the existing note', async () => {
   assert.equal(posted.fields.find((field) => field.header === 'Pagamento').value, 'Pago');
 });
 
-test('não atendeu posts processing and Legenda without leaving a secret', async () => {
+test('não atendeu posts processing and Estado without leaving a secret', async () => {
   process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
   process.env.APPS_SCRIPT_SECRET = SECRET;
   let posted = null;
   const app = createApp();
   const values = [...IDA_VALUES];
-  values[5] = '[status:processing]';
+  values[6] = '[status:processing]';
   await withFetch(async (_url, init) => {
     if (init.method === 'POST') posted = JSON.parse(init.body);
     return new Response(JSON.stringify({ ok: true, headers: HEADERS, row: { row: 2, values } }), {
@@ -232,8 +261,8 @@ test('não atendeu posts processing and Legenda without leaving a secret', async
     assert.equal(response.text.includes(SECRET), false);
   });
   assert.equal(posted.status, 'processing');
-  assert.equal(posted.fields.find((field) => field.header === 'Legenda').value, 'Em processamento');
-  assert.equal(posted.fields.find((field) => field.header === '1º Contacto').ifBlank, true);
+  assert.equal(posted.fields.find((field) => field.header === 'Estado').value, 'Em processamento');
+  assert.equal(posted.fields.some((field) => field.header === '1º Contacto'), false);
 });
 
 test('discard without motivo is rejected before the sheet write', async () => {
@@ -252,13 +281,13 @@ test('discard without motivo is rejected before the sheet write', async () => {
   assert.equal(called, false);
 });
 
-test('discard with motivo is posted to Legenda and Observações', async () => {
+test('discard with motivo is posted to Estado and Comentários', async () => {
   process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
   process.env.APPS_SCRIPT_SECRET = SECRET;
   let posted = null;
   const app = createApp();
   const values = [...IDA_VALUES];
-  values[5] = '[status:discarded]\n[motivo:não interessa]';
+  values[6] = '[status:discarded]\n[motivo:não interessa]';
   await withFetch(async (_url, init) => {
     if (init.method === 'POST') posted = JSON.parse(init.body);
     return new Response(JSON.stringify({ ok: true, headers: HEADERS, row: { row: 2, values } }), {
@@ -274,7 +303,35 @@ test('discard with motivo is posted to Legenda and Observações', async () => {
   });
   assert.equal(posted.motivo, 'não interessa');
   assert.equal(posted.motivoSet, true);
-  assert.equal(posted.fields.find((field) => field.header === 'Legenda').value, 'Descartada');
+  assert.equal(posted.fields.find((field) => field.header === 'Estado').value, 'Descartada');
+});
+
+test('updates by row id still post when the contact date is before the cutoff', async () => {
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  let posted = null;
+  const app = createApp();
+  const old = [...IDA_VALUES];
+  old[0] = '2026-08-01T10:00:00.000Z';
+  old[2] = 'Lead Antiga';
+  old[5] = '2026-08-01';
+  old[6] = '[status:processing]';
+  await withFetch(async (_url, init) => {
+    if (init.method === 'POST') posted = JSON.parse(init.body);
+    return new Response(JSON.stringify({ ok: true, headers: HEADERS, row: { row: 9, values: old } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }, async () => {
+    const response = await call(app, 'PATCH', '/api/leads/9', { status: 'processing' });
+    assert.equal(response.status, 200);
+    assert.equal(response.json.name, 'Lead Antiga');
+    assert.equal(response.json.contactDay, '2026-08-01');
+    assert.equal(response.json.id, '9');
+  });
+  assert.equal(posted.action, 'update');
+  assert.equal(posted.id, '9');
+  assert.equal(posted.status, 'processing');
 });
 
 test('sheet rows are not deleted through the API', async () => {
@@ -283,16 +340,27 @@ test('sheet rows are not deleted through the API', async () => {
   assert.equal(response.status, 405);
 });
 
-test('apps script is bound to Inbound META and the client bundle has no secret', () => {
+test('apps script is bound to Leads (2024 - 2026) and the client bundle has no secret', () => {
   const gas = readFileSync(new URL('../backend-gas/Code.gs', import.meta.url), 'utf8');
+  const syncDoc = readFileSync(new URL('../SYNC-DANIEL-EVOB.md', import.meta.url), 'utf8').trim();
   const client = `${readFileSync(new URL('../api.ts', import.meta.url), 'utf8')}\n${readFileSync(new URL('../App.tsx', import.meta.url), 'utf8')}\n${readFileSync(new URL('../public/pin.js', import.meta.url), 'utf8')}`;
   assert.match(gas, /var SHEET_ID = '1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8'/);
   assert.match(gas, /1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w/);
   assert.doesNotMatch(gas, /var SHEET_ID = '1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w'/);
-  assert.match(gas, /Inbound META/);
-  assert.match(gas, /Leads \(2024 - 2026\)/);
+  assert.match(gas, /aliases: \['4', 'Timestamp'/);
+  assert.match(gas, /var SHEET_TAB = 'Leads \(2024 - 2026\)'/);
+  assert.match(gas, /var CONTACT_CUTOFF_DAY = '2026-09-01'/);
+  assert.match(gas, /passesContactCutoff_/);
+  assert.match(gas, /Comentários/);
+  assert.match(gas, /Nº Paciente Definitivo/);
+  assert.doesNotMatch(gas, /FORBIDDEN_TAB/);
+  assert.doesNotMatch(gas, /var SHEET_TAB = 'Inbound META'/);
   assert.doesNotMatch(gas, /1LMcABX/);
   assert.doesNotMatch(gas, /getSheets\(\)\[0\]/);
+  assert.doesNotMatch(gas, /SyncDaniel/);
+  assert.equal(existsSync(new URL('../backend-gas/SyncDaniel.gs', import.meta.url)), false);
+  assert.equal(syncDoc.split('\n').length, 1);
+  assert.match(syncDoc, /fora deste PR/);
   assert.match(client, /PIN = '2000'/);
   assert.doesNotMatch(client, /APPS_SCRIPT_SECRET\s*=/);
   assert.doesNotMatch(client, /script\.google\.com/);
