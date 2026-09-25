@@ -3,7 +3,7 @@
  *
  * Folha ligada ao Apps Script (live /exec): 1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8
  * A folha de Daniel 1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w (Constant Circle)
- * é a fonte do sync append-only (SyncDaniel.gs), não a folha ligada a este script.
+ * não está ligada a este script. Sync e população da aba ficam fora deste projecto.
  * Só lê e escreve a aba «Leads (2024 - 2026)».
  *
  * A lista (action=leads) inclui só linhas com data de contacto >= 2026-09-01

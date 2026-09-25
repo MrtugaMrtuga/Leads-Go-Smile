@@ -3,12 +3,11 @@
 Web app grátis, ligada à folha **Leads - Go Smile**. Não há projecto Google Cloud, conta de serviço nem billing.
 
 - Folha ligada ao Apps Script (live `/exec`): `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8`
-- Fonte do sync append-only (Daniel, Constant Circle), não é a folha ligada: `1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`
+- Folha de Daniel (Constant Circle), não ligada a este script: `1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`
 - Aba única: **Leads (2024 - 2026)** (nome exacto, com espaços)
 - A aba «Inbound META» não é lida nem escrita
-- Lista da app: data de contacto **>= 2026-09-01** (Europe/Lisbon). Ver [SYNC-DANIEL-EVOB.md](../SYNC-DANIEL-EVOB.md)
-
-Se a aba não existir na folha EVOB, crie-a com esse nome antes de publicar. Etiqueta sugerida: `MacMini-leads-tab-2024-v1`.
+- Lista da app: data de contacto **>= 2026-09-01** (Europe/Lisbon)
+- Sync e população da aba ficam fora deste PR ([SYNC-DANIEL-EVOB.md](../SYNC-DANIEL-EVOB.md)). Etiqueta sugerida: `MacMini-leads-tab-2024-v1`
 
 O `/exec` em produção já está ligado à folha de cima. Este ficheiro regista esse ID. Não crie outra implementação por cima do URL live só para alinhar o repositório.
 
@@ -16,9 +15,9 @@ O Mini (Node, porta 3040) chama este `/exec` com o segredo. O browser nunca rece
 
 ## 1. Ligar o script à folha
 
-1. A folha ligada é `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8` (conta que a edita, de preferência brunoairesaugusto@gmail.com). A de daniel@constantcircle.co (`1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`) é só a fonte do sync. Confirme a aba **Leads (2024 - 2026)** na EVOB.
+1. A folha ligada é `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8` (conta que a edita, de preferência brunoairesaugusto@gmail.com). A de daniel@constantcircle.co (`1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`) não é a folha deste script. Criar e encher a aba **Leads (2024 - 2026)** fica fora deste PR.
 2. **Extensões → Apps Script**.
-3. Apague o `Code.gs` de exemplo e cole [`Code.gs`](./Code.gs). Para o sync manual, cole também [`SyncDaniel.gs`](./SyncDaniel.gs).
+3. Apague o `Code.gs` de exemplo e cole [`Code.gs`](./Code.gs).
 4. Em **Definições do projecto → Mostrar ficheiro de manifesto**, confirme o [`appsscript.json`](./appsscript.json) (fuso `Europe/Lisbon`, runtime V8).
 5. Guarde.
 

@@ -5,7 +5,7 @@
  *
  * SHEET_ID is the sheet bound to the live Apps Script /exec.
  * Daniel's sheet 1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w (Constant Circle)
- * is the Meta source for the append-only sync, not this ID.
+ * is not this ID. Tab setup and sync live outside this project.
  * Nothing in the Node server reads SHEET_ID.
  *
  * App lists include a row only when the contact day is on or after CONTACT_CUTOFF_DAY
@@ -339,8 +339,7 @@ export function filterLeadsForApp(leads) {
 }
 
 /**
- * Append-only sync key. Same formula as syncKeyFromRaw_ in backend-gas/SyncDaniel.gs.
- * phone digits, else email, else folded name — plus folded name and the Lisbon contact day.
+ * Stable row key: phone digits, else email, else folded name — plus folded name and the Lisbon contact day.
  */
 export function syncLeadKey({ nome = '', telefone = '', email = '', contactDay = '' } = {}) {
   const phone = String(telefone || '').replace(/\D/g, '');

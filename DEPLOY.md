@@ -1,6 +1,6 @@
 # Deploy no Mac Mini — GoSmile Leads
 
-Alvo: **https://leads.evob.org** na porta **3040**, PWA instalável. As leads vivem na aba **Leads (2024 - 2026)** (Apps Script). Comissão e lembretes continuam em disco. Se essa aba não existir na folha EVOB `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8`, crie-a com esse nome exacto antes de publicar.
+Alvo: **https://leads.evob.org** na porta **3040**, PWA instalável. As leads vivem na aba **Leads (2024 - 2026)** (Apps Script). Comissão e lembretes continuam em disco. Sync e população dessa aba ficam fora deste repositório.
 
 ## 1. Requisitos
 
@@ -105,7 +105,7 @@ No Safari ou Chrome, abra https://leads.evob.org, introduza o PIN **2000**, depo
 
 ## 7. Cópias de segurança
 
-A base das leads é a Google Sheet (aba Leads (2024 - 2026), só datas de contacto >= 2026-09-01). `data/leads.json` é esvaziado no arranque e não deve ser restaurado como fonte. Faça backup de `data/settings.json` e `data/reminders.json` se quiser guardar comissão e lembretes. O sync Daniel → EVOB está em [SYNC-DANIEL-EVOB.md](./SYNC-DANIEL-EVOB.md).
+A base das leads é a Google Sheet (aba Leads (2024 - 2026), só datas de contacto >= 2026-09-01). `data/leads.json` é esvaziado no arranque e não deve ser restaurado como fonte. Faça backup de `data/settings.json` e `data/reminders.json` se quiser guardar comissão e lembretes. Sync e população da aba ficam fora deste PR.
 
 ```bash
 rsync -a data/settings.json data/reminders.json /Volumes/Backup/evault-leads-data/

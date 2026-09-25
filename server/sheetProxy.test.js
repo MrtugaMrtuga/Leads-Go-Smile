@@ -4,7 +4,7 @@ import { request as httpRequest } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 
 const dataDir = await mkdtemp(join(tmpdir(), 'leads-sheet-'));
 process.env.LEADS_DATA_DIR = dataDir;
@@ -337,8 +337,7 @@ test('sheet rows are not deleted through the API', async () => {
 
 test('apps script is bound to Leads (2024 - 2026) and the client bundle has no secret', () => {
   const gas = readFileSync(new URL('../backend-gas/Code.gs', import.meta.url), 'utf8');
-  const sync = readFileSync(new URL('../backend-gas/SyncDaniel.gs', import.meta.url), 'utf8');
-  const syncDoc = readFileSync(new URL('../SYNC-DANIEL-EVOB.md', import.meta.url), 'utf8');
+  const syncDoc = readFileSync(new URL('../SYNC-DANIEL-EVOB.md', import.meta.url), 'utf8').trim();
   const client = `${readFileSync(new URL('../api.ts', import.meta.url), 'utf8')}\n${readFileSync(new URL('../App.tsx', import.meta.url), 'utf8')}\n${readFileSync(new URL('../public/pin.js', import.meta.url), 'utf8')}`;
   assert.match(gas, /var SHEET_ID = '1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8'/);
   assert.match(gas, /1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w/);
@@ -352,13 +351,10 @@ test('apps script is bound to Leads (2024 - 2026) and the client bundle has no s
   assert.doesNotMatch(gas, /var SHEET_TAB = 'Inbound META'/);
   assert.doesNotMatch(gas, /1LMcABX/);
   assert.doesNotMatch(gas, /getSheets\(\)\[0\]/);
-  assert.match(sync, /DANIEL_SHEET_ID = '1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w'/);
-  assert.match(sync, /appendRow/);
-  assert.match(sync, /CONTACT_CUTOFF_DAY/);
-  assert.match(sync, /Leads \(2024 - 2026\)/);
-  assert.doesNotMatch(sync, /function doGet|function doPost/);
-  assert.match(syncDoc, /2026-09-01/);
-  assert.match(syncDoc, /append-only|Append-only/);
+  assert.doesNotMatch(gas, /SyncDaniel/);
+  assert.equal(existsSync(new URL('../backend-gas/SyncDaniel.gs', import.meta.url)), false);
+  assert.equal(syncDoc.split('\n').length, 1);
+  assert.match(syncDoc, /fora deste PR/);
   assert.match(client, /PIN = '2000'/);
   assert.doesNotMatch(client, /APPS_SCRIPT_SECRET\s*=/);
   assert.doesNotMatch(client, /script\.google\.com/);
