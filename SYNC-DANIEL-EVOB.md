@@ -16,11 +16,12 @@ A app (`GET /api/leads`, `tablePayload_` no Apps Script e `filterLeadsForApp` no
 
 Só se acrescentam linhas cuja data de contacto é **>= 2026-09-01**, dia de calendário **Europe/Lisbon** (inclusive).
 
-1. Usar **Data Contacto** quando a célula tem texto.
-2. Se **Data Contacto** estiver vazia, usar **timestamp**.
-3. Sem uma data legível, a linha não entra no sync nem na lista da app.
+1. Se a coluna **timestamp** (coluna A, mesmo com cabeçalho vazio, `Data`, `Timestamp` ou um número tipo `4`) tiver um dia **>= 2026-09-01**, esse dia ganha. É o instante das leads Meta novas.
+2. Senão, usar **Data Contacto** quando a célula for legível: ISO, `YYYY-MM-DD`, `DD.MM.YY` (`04.10.24 - 12h`), `DD.MM.YYYY`, `DD-MM-YYYY`, `DD/MM/YYYY`.
+3. Se **Data Contacto** estiver vazia ou ilegível, usar o timestamp na mesma.
+4. Sem uma data legível, a linha não entra no sync nem na lista da app.
 
-Um instante com `Z` ou desfasamento numérico converte-se para Lisboa. `dd/mm/aaaa` e uma data `aaaa-mm-dd` sem fuso ficam no dia escrito (é o dia da folha).
+Um instante com `Z` ou desfasamento numérico converte-se para Lisboa. `2024-10-03 22:15:37`, `dd.mm.aa`, `dd/mm/aaaa` e `aaaa-mm-dd` sem fuso ficam no dia escrito (é o dia da folha).
 
 `PATCH /api/leads/:id` continua a gravar pelo número da linha, mesmo que essa linha seja anterior ao corte ou já não apareça na lista. O corte é da população da app, não um bloqueio de escrita por id.
 

@@ -5,7 +5,8 @@
  * Não apaga nem sobrescreve células já gravadas na EVOB.
  *
  * Corte: data de contacto >= CONTACT_CUTOFF_DAY (2026-09-01, Europe/Lisbon).
- * Preferir Data Contacto; se vazia, timestamp. A chave e o dia espelham
+ * Timestamp nesse dia ou depois ganha; senão Data Contacto; se ilegível, timestamp.
+ * A chave e o dia espelham
  * syncLeadKey / contactDayFromText em shared/inboundMeta.js.
  *
  * A aba tem de existir na folha EVOB. Se faltar, o MacMiner cria-a com o nome exacto.

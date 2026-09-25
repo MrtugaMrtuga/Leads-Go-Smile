@@ -7,8 +7,10 @@
  * Só lê e escreve a aba «Leads (2024 - 2026)».
  *
  * A lista (action=leads) inclui só linhas com data de contacto >= 2026-09-01
- * (dia de calendário Europe/Lisbon). Preferir Data Contacto; se vazia, timestamp.
- * update/create continuam por número de linha e não aplicam este corte.
+ * (dia de calendário Europe/Lisbon). Um timestamp nesse dia ou depois ganha
+ * (leads Meta). Senão, Data Contacto se for legível; se vazia ou ilegível, timestamp.
+ * A coluna A é o timestamp quando o cabeçalho é Timestamp, Data, vazio, ou um
+ * número de exportação (por exemplo «4»). update/create não aplicam este corte.
  *
  * Segredo: propriedade do script APPS_SCRIPT_SECRET, igual à env do Mini.
  * O mapeamento de colunas espelha shared/inboundMeta.js.
@@ -19,7 +21,7 @@ var SHEET_TAB = 'Leads (2024 - 2026)';
 var CONTACT_CUTOFF_DAY = '2026-09-01';
 
 var COLUMN_DEFS = [
-  { key: 'timestamp_col', header: 'timestamp', aliases: ['Timestamp', 'Carimbo de data/hora'] },
+  { key: 'timestamp_col', header: 'timestamp', aliases: ['Timestamp', 'Data', 'Carimbo de data/hora'] },
   { key: 'origem', header: 'Origem' },
   { key: 'nome', header: 'Nome', aliases: ['Nome Paciente', 'Nome do paciente'] },
   { key: 'email', header: 'Email', aliases: ['E-mail', 'E-Mail'] },
@@ -145,6 +147,13 @@ function statusFromEstado_(value) {
   return '';
 }
 
+function fullYear_(token) {
+  var text = String(token || '');
+  if (text.length === 4) return text;
+  var year = Number(text);
+  return String(year >= 70 ? 1900 + year : 2000 + year);
+}
+
 function contactDayFromText_(value) {
   var text = String(value || '').trim();
   if (!text) return '';
@@ -157,14 +166,14 @@ function contactDayFromText_(value) {
     if (isNaN(zoned.getTime())) return '';
     return Utilities.formatDate(zoned, 'Europe/Lisbon', 'yyyy-MM-dd');
   }
-  var pt = text.match(/^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/);
+  var pt = text.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4}|\d{2})(?!\d)/);
   if (pt) {
     var dayNum = Number(pt[1]);
     var monthNum = Number(pt[2]);
     if (monthNum < 1 || monthNum > 12 || dayNum < 1 || dayNum > 31) return '';
     var day = ('0' + pt[1]).slice(-2);
     var month = ('0' + pt[2]).slice(-2);
-    return pt[3] + '-' + month + '-' + day;
+    return fullYear_(pt[3]) + '-' + month + '-' + day;
   }
   var fallback = new Date(text);
   if (isNaN(fallback.getTime())) return '';
@@ -172,9 +181,51 @@ function contactDayFromText_(value) {
 }
 
 function contactDayFromRaw_(raw) {
+  var stampDay = contactDayFromText_((raw && raw.timestamp_col) || '');
+  var contactDay = contactDayFromText_((raw && raw.data_contacto) || '');
+  if (stampDay && stampDay >= CONTACT_CUTOFF_DAY) return stampDay;
+  if (contactDay) return contactDay;
+  return stampDay;
+}
+
+function contactSourceText_(raw) {
+  var stamp = String((raw && raw.timestamp_col) || '').trim();
   var contact = String((raw && raw.data_contacto) || '').trim();
-  if (contact) return contactDayFromText_(contact);
-  return contactDayFromText_((raw && raw.timestamp_col) || '');
+  var stampDay = contactDayFromText_(stamp);
+  var contactDay = contactDayFromText_(contact);
+  if (stampDay && stampDay >= CONTACT_CUTOFF_DAY) return stamp;
+  if (contactDay) return contact;
+  if (stampDay) return stamp;
+  return contact || stamp;
+}
+
+function claimTimestampColumn_(indexed, values, raw) {
+  if (String((raw && raw.timestamp_col) || '').trim()) return;
+  var named = null;
+  var first = null;
+  for (var i = 0; i < indexed.length; i += 1) {
+    var col = indexed[i];
+    if (col.index === 0) first = col;
+    if (col.label && (col.folded === 'timestamp' || col.folded === 'data') && col.occurrence === 1) named = col;
+  }
+  var column = named;
+  if (!column && first) {
+    var loose = !first.folded || first.folded === 'timestamp' || first.folded === 'data' || /^\d+$/.test(first.folded);
+    var other = false;
+    if (!loose) {
+      for (var d = 0; d < COLUMN_DEFS.length; d += 1) {
+        var def = COLUMN_DEFS[d];
+        if (def.key === 'timestamp_col') continue;
+        var names = [def.header].concat(def.aliases || []);
+        for (var n = 0; n < names.length; n += 1) {
+          if (foldHeader_(names[n]) === first.folded) other = true;
+        }
+      }
+    }
+    if (loose || !other) column = first;
+  }
+  if (!column) return;
+  raw.timestamp_col = String(values[column.index] || '').trim();
 }
 
 function passesContactCutoff_(raw) {
@@ -362,13 +413,14 @@ function rawFromRow_(headers, values) {
     var column = findDefColumn_(indexed, def);
     raw[def.key] = column ? String(values[column.index] || '').trim() : '';
   });
+  claimTimestampColumn_(indexed, values, raw);
   return raw;
 }
 
 function buildLead_(headers, values, sheetRow) {
   var raw = rawFromRow_(headers, values);
   if (!raw.nome) return null;
-  var contactText = String(raw.data_contacto || '').trim() || String(raw.timestamp_col || '').trim();
+  var contactText = contactSourceText_(raw);
   var primary = splitStatusNote_(raw.observacoes);
   var status = inferStatus_(raw);
   var formFields = [];
@@ -389,7 +441,7 @@ function buildLead_(headers, values, sheetRow) {
     telefone: raw.telefone || '',
     email: raw.email || '',
     dataContacto: contactText,
-    contactDay: contactDayFromText_(contactText),
+    contactDay: contactDayFromRaw_(raw),
     name: raw.nome,
     phone: raw.telefone || '',
     timestamp: contactText,

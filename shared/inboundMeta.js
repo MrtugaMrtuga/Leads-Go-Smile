@@ -9,8 +9,10 @@
  * Nothing in the Node server reads SHEET_ID.
  *
  * App lists include a row only when the contact day is on or after CONTACT_CUTOFF_DAY
- * (Europe/Lisbon). Prefer Data Contacto; if that cell is empty, use timestamp.
- * Updates still address the sheet row id and are not dropped by this cutoff.
+ * (Europe/Lisbon). A timestamp on or after that day wins (Meta rows). Otherwise use
+ * Data Contacto when it parses; if it is empty or unparseable, use the timestamp column.
+ * Column A is the timestamp when its header is Timestamp, Data, blank, or a numeric
+ * Drive label such as "4". Updates by row id are not dropped by this cutoff.
  */
 
 export const SHEET_ID = '1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8';
@@ -21,7 +23,7 @@ export const SHEET_TAB = 'Leads (2024 - 2026)';
 export const CONTACT_CUTOFF_DAY = '2026-09-01';
 
 export const COLUMN_DEFS = [
-  { key: 'timestamp_col', header: 'timestamp', aliases: ['Timestamp', 'Carimbo de data/hora'] },
+  { key: 'timestamp_col', header: 'timestamp', aliases: ['Timestamp', 'Data', 'Carimbo de data/hora'] },
   { key: 'origem', header: 'Origem' },
   { key: 'nome', header: 'Nome', aliases: ['Nome Paciente', 'Nome do paciente'] },
   { key: 'email', header: 'Email', aliases: ['E-mail', 'E-Mail'] },
@@ -260,11 +262,17 @@ export function lisbonDayKey(value) {
   }).format(date);
 }
 
+function fullYear(token) {
+  if (String(token).length === 4) return String(token);
+  const year = Number(token);
+  return String(year >= 70 ? 1900 + year : 2000 + year);
+}
+
 /**
  * Lisbon calendar day for a contact cell.
- * Date-only and unzoned sheet values keep their written day.
- * Instants with Z or a numeric offset are converted to Europe/Lisbon.
- * Portuguese dd/mm/yyyy is already a Lisbon sheet day.
+ * Unzoned ISO (`2024-10-03 22:15:37`, `YYYY-MM-DD`) keeps the written day.
+ * Instants with Z or a numeric offset convert to Europe/Lisbon.
+ * Portuguese day-first dates (`04.10.24 - 12h`, `DD/MM/YYYY`, `DD-MM-YYYY`) keep that day.
  */
 export function contactDayFromText(value) {
   const text = String(value ?? '').trim();
@@ -278,22 +286,41 @@ export function contactDayFromText(value) {
     return lisbonDayKey(text);
   }
 
-  const pt = text.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})/);
+  const pt = text.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{4}|\d{2})(?!\d)/);
   if (pt) {
     const dayNum = Number(pt[1]);
     const monthNum = Number(pt[2]);
+    const year = fullYear(pt[3]);
     if (monthNum < 1 || monthNum > 12 || dayNum < 1 || dayNum > 31) return '';
-    return `${pt[3]}-${pt[2].padStart(2, '0')}-${pt[1].padStart(2, '0')}`;
+    return `${year}-${pt[2].padStart(2, '0')}-${pt[1].padStart(2, '0')}`;
   }
 
   return lisbonDayKey(text);
 }
 
-/** Prefer Data Contacto. Use timestamp only when that cell is empty. */
+/**
+ * Contact day for the app cutoff.
+ * A timestamp on or after CONTACT_CUTOFF_DAY wins (Meta rows that just landed).
+ * Otherwise Data Contacto, when it parses. If that cell is empty or unparseable, the timestamp column.
+ */
 export function contactDayFromRaw(raw = {}) {
+  const stampDay = contactDayFromText(raw.timestamp_col);
+  const contactDay = contactDayFromText(raw.data_contacto);
+  if (stampDay && stampDay >= CONTACT_CUTOFF_DAY) return stampDay;
+  if (contactDay) return contactDay;
+  return stampDay;
+}
+
+/** Cell text that produced contactDayFromRaw, for display and sorting. */
+export function contactSourceText(raw = {}) {
+  const stamp = String(raw.timestamp_col || '').trim();
   const contact = String(raw.data_contacto || '').trim();
-  if (contact) return contactDayFromText(contact);
-  return contactDayFromText(raw.timestamp_col || '');
+  const stampDay = contactDayFromText(stamp);
+  const contactDay = contactDayFromText(contact);
+  if (stampDay && stampDay >= CONTACT_CUTOFF_DAY) return stamp;
+  if (contactDay) return contact;
+  if (stampDay) return stamp;
+  return contact || stamp;
 }
 
 export function leadContactDay(lead) {
@@ -591,6 +618,28 @@ function findColumn(indexed, def) {
   return undefined;
 }
 
+function isKnownNonTimestampHeader(folded) {
+  return COLUMN_DEFS.some((def) => {
+    if (def.key === 'timestamp_col') return false;
+    return headerNames(def).some((name) => foldHeader(name) === folded);
+  });
+}
+
+/** Column A is the timestamp when the header is Timestamp, Data, blank, or a numeric Drive label ("4"). */
+function claimTimestampColumn(indexed, cells, raw, used) {
+  if (String(raw.timestamp_col || '').trim()) return;
+  const named = indexed.find((col) => col.label && (col.folded === 'timestamp' || col.folded === 'data') && col.occurrence === 1);
+  const first = indexed.find((col) => col.index === 0);
+  let column = named;
+  if (!column && first) {
+    const loose = !first.folded || first.folded === 'timestamp' || first.folded === 'data' || /^\d+$/.test(first.folded);
+    if (loose || !isKnownNonTimestampHeader(first.folded)) column = first;
+  }
+  if (!column) return;
+  raw.timestamp_col = String(cells[column.index] ?? '').trim();
+  if (used) used.add(column.index);
+}
+
 function parseMoney(value) {
   const text = String(value ?? '').trim();
   if (!text) return 0;
@@ -690,12 +739,13 @@ function mapRow(indexed, cells, sheetRow) {
     raw[def.key] = value;
     if (column) used.add(column.index);
   });
+  claimTimestampColumn(indexed, cells, raw, used);
 
   const name = raw.nome;
   if (!name) return null;
 
-  const contactText = String(raw.data_contacto || '').trim() || String(raw.timestamp_col || '').trim();
-  const contactDay = contactDayFromText(contactText);
+  const contactText = contactSourceText(raw);
+  const contactDay = contactDayFromRaw(raw);
   const timestamp = contactText ? parseTimestamp(contactText) : new Date().toISOString();
   const primary = splitStatusNote(raw.observacoes);
   const formFields = [];

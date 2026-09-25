@@ -91,7 +91,7 @@ Não há variáveis novas no Mini. `APPS_SCRIPT_URL` e `APPS_SCRIPT_SECRET` cheg
 | Motivo do descarte | **Comentários**, linha `[motivo:…]` | Obrigatório para passar a `discarded`. Sobrevive ao reload. A UI mostra o texto, não o marcador |
 | Nome, email, telefone, origem | **Nome** (ou Nome Paciente), **Email** (ou E-mail), **Telefone**, **Origem** | Leitura. O create grava Nome, Email, Telefone, Data Contacto e Comentários |
 | Marcação | **Data Primeira Consulta** e **Médico** | Já usados por Agendar, em conjunto com Estado `Marcada` |
-| Corte da lista | **Data Contacto**, senão **timestamp** | Só linhas com dia de Lisboa >= `2026-09-01` entram em `action=leads`. O update por id não usa este corte |
+| Corte da lista | **timestamp** da coluna A (cabeçalho Timestamp, Data, vazio ou `4`) quando o dia é >= `2026-09-01`; senão **Data Contacto** (`04.10.24 - 12h`, ISO, `DD-MM-YYYY`); se ilegível, o timestamp | Só essas linhas entram em `action=leads`. O update por id não usa este corte |
 | Data do fecho | **Data fecho** (criada na primeira gravação se a coluna não existir) e, na mesma célula de Comentários, `[fecho:…]` | ISO de quando a lead saiu da inbox (marcada ou descartada). A primeira data mantém-se. Voltar à inbox apaga-a. Se faltar nas linhas antigas, a evolução usa a Data Contacto |
 
 Na primeira vez que uma lead passa a marcada ou descartada, o script acrescenta o cabeçalho **Data fecho** no fim da linha 1, se ele ainda não existir. Não mexe nas outras colunas.

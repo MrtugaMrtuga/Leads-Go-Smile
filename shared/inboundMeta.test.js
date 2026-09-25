@@ -379,9 +379,15 @@ test('portuguese sheet dates stay on the contact day', () => {
   assert.equal(contactDayFromText('31/08/2026 23:30'), '2026-08-31');
   assert.equal(contactDayFromText('2026-08-31T23:30:00.000Z'), '2026-09-01');
   assert.equal(contactDayFromText('2026-08-31T22:00:00.000Z'), '2026-08-31');
+  assert.equal(contactDayFromText('2024-10-03 22:15:37'), '2024-10-03');
+  assert.equal(contactDayFromText('04.10.24 - 12h'), '2024-10-04');
+  assert.equal(contactDayFromText('02.09.26 - 9h'), '2026-09-02');
+  assert.equal(contactDayFromText('23.09.2026'), '2026-09-23');
+  assert.equal(contactDayFromText('04-10-2024'), '2024-10-04');
+  assert.equal(contactDayFromText('23-09-2026'), '2026-09-23');
 });
 
-test('app list keeps contact days on or after 2026-09-01 and prefers Data Contacto', () => {
+test('app list keeps contact days on or after 2026-09-01 and prefers a Meta timestamp', () => {
   assert.equal(CONTACT_CUTOFF_DAY, '2026-09-01');
   const leads = mapSheetCsv(
     toCsv([
@@ -393,18 +399,83 @@ test('app list keeps contact days on or after 2026-09-01 and prefers Data Contac
       ['', 'Sem data', ''],
       ['2026-08-31T23:30:00.000Z', 'Véspera em UTC já é 1 de Setembro em Lisboa', ''],
       ['2026-09-01', 'Dia do corte', ''],
+      ['2024-10-03 22:15:37', 'Contacto ilegível cai no timestamp', 'ver depois'],
     ])
   );
   const names = filterLeadsForApp(leads).map((lead) => lead.name);
   assert.deepEqual(names, [
     'Dentro pelo timestamp e pela data',
+    'Timestamp novo mas contacto antigo',
     'Só timestamp',
     'Véspera em UTC já é 1 de Setembro em Lisboa',
     'Dia do corte',
   ]);
+  const both = leads.find((lead) => lead.name === 'Dentro pelo timestamp e pela data');
+  assert.equal(both.contactDay, '2026-09-20');
   const preferred = leads.find((lead) => lead.name === 'Timestamp novo mas contacto antigo');
-  assert.equal(preferred.contactDay, '2026-08-20');
-  assert.equal(filterLeadsForApp([preferred]).length, 0);
+  assert.equal(preferred.contactDay, '2026-09-15');
+  const oldStamp = leads.find((lead) => lead.name === 'Contacto ilegível cai no timestamp');
+  assert.equal(oldStamp.contactDay, '2024-10-03');
+  assert.equal(filterLeadsForApp([oldStamp]).length, 0);
+});
+
+test('Drive sample reads column A as timestamp when the header is 4', () => {
+  const headers = [
+    '4',
+    'Origem',
+    'Nome',
+    'Email',
+    'Telefone',
+    'Responsável',
+    'Data Contacto',
+    'Comentários',
+    'Data Primeira Consulta',
+    'Médico',
+    'Nº Paciente Definitivo',
+    'Estado',
+    'Data Próxima Consulta',
+    'Orçamentado',
+    'Pagamento',
+    'Financiamento',
+    'Valor Real Bruto',
+  ];
+  const leads = mapSheetCsv(
+    toCsv([
+      headers,
+      ['2024-10-03 22:15:37', 'Meta', 'Histórica', 'a@b.pt', '351910000000', '', '04.10.24 - 12h', '', '', '', '', '', '', '', '', '', ''],
+      ['2026-09-23 22:15:37', 'Meta', 'Meta Nova', 'b@b.pt', '351920000000', '', '', '', '', '', '', '', '', '', '', '', ''],
+      ['2026-09-24 09:00:00', 'Meta', 'Sem data de contacto', 'c@b.pt', '351930000000', '', 'ver depois', '', '', '', '', '', '', '', '', '', ''],
+      ['2024-10-03 22:15:37', 'Orgânico', 'Contacto em Setembro', 'd@b.pt', '351940000000', '', '02.09.26 - 9h', '', '', '', '', '', '', '', '', '', ''],
+    ])
+  );
+  const byName = Object.fromEntries(leads.map((lead) => [lead.name, lead]));
+  assert.equal(byName.Histórica.contactDay, '2024-10-04');
+  assert.equal(byName['Meta Nova'].contactDay, '2026-09-23');
+  assert.equal(byName['Sem data de contacto'].contactDay, '2026-09-24');
+  assert.equal(byName['Contacto em Setembro'].contactDay, '2026-09-02');
+  assert.equal(byName.Histórica.formFields.some((field) => field.label === '4'), false);
+  assert.equal(byName.Histórica.origem || byName.Histórica.source, 'Meta');
+  assert.deepEqual(filterLeadsForApp(leads).map((lead) => lead.name), [
+    'Meta Nova',
+    'Sem data de contacto',
+    'Contacto em Setembro',
+  ]);
+
+  const [blankHeader] = mapSheetCsv(
+    toCsv([
+      ['', 'Nome', 'Data Contacto'],
+      ['2026-09-23 22:15:37', 'Cabeçalho vazio', ''],
+    ])
+  );
+  assert.equal(blankHeader.contactDay, '2026-09-23');
+
+  const [dataHeader] = mapSheetCsv(
+    toCsv([
+      ['Data', 'Nome'],
+      ['2026-09-05 08:00:00', 'Coluna Data'],
+    ])
+  );
+  assert.equal(dataHeader.contactDay, '2026-09-05');
 });
 
 test('sync key ignores phone punctuation and keeps the Lisbon day', () => {

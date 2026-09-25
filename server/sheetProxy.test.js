@@ -147,11 +147,12 @@ test('listing uses Leads (2024 - 2026) rows on or after the cutoff and ignores l
   }, async () => {
     const response = await call(app, 'GET', '/api/leads');
     assert.equal(response.status, 200);
-    assert.equal(response.json.length, 2);
+    assert.equal(response.json.length, 3);
     assert.deepEqual(
       response.json.map((lead) => lead.name),
-      ['Ida Cristina Albuquerque Malho Rodrigues de Oliveira', 'Só Timestamp']
+      ['Ida Cristina Albuquerque Malho Rodrigues de Oliveira', 'Só Timestamp', 'Contacto Antigo']
     );
+    assert.equal(response.json[2].contactDay, '2026-09-20');
     assert.equal(response.json[0].id, '2');
     assert.equal(response.json[0].sourceTab, 'Leads (2024 - 2026)');
     assert.equal(response.json[0].source, 'Meta');
