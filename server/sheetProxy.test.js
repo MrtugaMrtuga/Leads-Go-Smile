@@ -13,6 +13,7 @@ process.env.APPS_SCRIPT_URL = '';
 process.env.APPS_SCRIPT_SECRET = '';
 
 const { createApp } = await import('./index.js');
+const { clearLeadsListCache } = await import('./sheetClient.js');
 
 const SECRET = 'mini-only-secret-value';
 const HEADERS = [
@@ -81,7 +82,7 @@ function call(app, method, path, body) {
             const text = Buffer.concat(chunks).toString('utf8');
             let json = null;
             if (text) json = JSON.parse(text);
-            resolve({ status: res.statusCode, text, json });
+            resolve({ status: res.statusCode, text, json, headers: res.headers });
           });
         });
       }
@@ -391,6 +392,193 @@ test('the close chart is in the client source that the production bundle builds'
   assert.doesNotMatch(bundledCss, /fill:\s*url\(/);
   assert.match(look, /\.evo-line\.ink/);
   assert.match(look, /\.evo-line\.wood/);
+});
+
+test('second GET /api/leads stays under a second when the memory cache is warm', async () => {
+  await clearLeadsListCache();
+  process.env.LEADS_CACHE_TTL_MS = '45000';
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  let calls = 0;
+  const app = createApp();
+
+  await withFetch(async () => {
+    calls += 1;
+    await new Promise((resolve) => setTimeout(resolve, 1200));
+    return new Response(JSON.stringify(sheetPayload()), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }, async () => {
+    const cold = await call(app, 'GET', '/api/leads');
+    assert.equal(cold.status, 200);
+    assert.equal(cold.headers['x-leads-cache'], 'miss');
+    assert.equal(cold.json[0].name, 'Ida Cristina Albuquerque Malho Rodrigues de Oliveira');
+    const started = Date.now();
+    const warm = await call(app, 'GET', '/api/leads');
+    const elapsed = Date.now() - started;
+    assert.equal(warm.status, 200);
+    assert.equal(warm.headers['x-leads-cache'], 'hit');
+    assert.equal(warm.json.length, cold.json.length);
+    assert.equal(warm.json[0].id, cold.json[0].id);
+    assert.ok(elapsed < 1000, `warm GET took ${elapsed}ms`);
+    assert.equal(calls, 1);
+  });
+});
+
+test('stale GET returns the cache immediately and fresh=1 waits for the sheet', async () => {
+  await clearLeadsListCache();
+  process.env.LEADS_CACHE_TTL_MS = '30';
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  let calls = 0;
+  let release = () => {};
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const app = createApp();
+  const updated = [...IDA_VALUES];
+  updated[2] = 'Lead Actualizada';
+
+  await withFetch(async () => {
+    calls += 1;
+    if (calls > 1) await gate;
+    return new Response(JSON.stringify(sheetPayload(calls > 1 ? updated : IDA_VALUES)), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }, async () => {
+    const cold = await call(app, 'GET', '/api/leads');
+    assert.equal(cold.headers['x-leads-cache'], 'miss');
+    assert.equal(calls, 1);
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    const started = Date.now();
+    const stale = await call(app, 'GET', '/api/leads');
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed < 1000, `stale GET took ${elapsed}ms`);
+    assert.equal(stale.headers['x-leads-cache'], 'stale');
+    assert.equal(stale.json[0].name, 'Ida Cristina Albuquerque Malho Rodrigues de Oliveira');
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    assert.equal(calls, 2);
+    const pending = call(app, 'GET', '/api/leads?fresh=1');
+    release();
+    const fresh = await pending;
+    assert.equal(fresh.status, 200);
+    assert.equal(fresh.headers['x-leads-cache'], 'hit');
+    assert.equal(fresh.json[0].name, 'Lead Actualizada');
+    assert.equal(calls, 2);
+  });
+});
+
+test('leads-cache.json is served on a cold process and leads.json is not the list', async () => {
+  await clearLeadsListCache();
+  process.env.LEADS_CACHE_TTL_MS = '60000';
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  await writeFile(
+    join(dataDir, 'leads.json'),
+    `${JSON.stringify([{ id: '9', name: 'From Leads Json', timestamp: '2026-09-20T00:00:00.000Z' }])}\n`
+  );
+  await writeFile(
+    join(dataDir, 'leads-cache.json'),
+    `${JSON.stringify({
+      at: Date.now(),
+      leads: [
+        {
+          id: '2',
+          name: 'From Cache File',
+          phone: '351962852158',
+          email: 'a@b.c',
+          timestamp: '2026-09-20T17:14:04.000Z',
+          contactDay: '2026-09-20',
+          status: 'new',
+          isContacted: false,
+        },
+      ],
+    })}\n`
+  );
+  let calls = 0;
+  const app = createApp();
+  await withFetch(async () => {
+    calls += 1;
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    return new Response(JSON.stringify(sheetPayload()), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }, async () => {
+    const started = Date.now();
+    const response = await call(app, 'GET', '/api/leads');
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed < 1000, `file cache GET took ${elapsed}ms`);
+    assert.equal(response.status, 200);
+    assert.equal(response.headers['x-leads-cache'], 'hit');
+    assert.equal(response.json[0].name, 'From Cache File');
+    assert.equal(JSON.stringify(response.json).includes('From Leads Json'), false);
+    assert.equal(calls, 0);
+  });
+  assert.deepEqual(JSON.parse(await readFile(join(dataDir, 'leads.json'), 'utf8')), []);
+});
+
+test('a sheet write is visible on the next warm GET without another list round-trip', async () => {
+  await clearLeadsListCache();
+  process.env.LEADS_CACHE_TTL_MS = '45000';
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  let listCalls = 0;
+  const app = createApp();
+  const values = [...IDA_VALUES];
+  values[6] = '[status:contacted]\nliguei hoje';
+
+  await withFetch(async (_url, init) => {
+    if (String(init?.method || 'GET').toUpperCase() === 'POST') {
+      return new Response(JSON.stringify({ ok: true, headers: HEADERS, row: { row: 2, values } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    listCalls += 1;
+    return new Response(JSON.stringify(sheetPayload()), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }, async () => {
+    const cold = await call(app, 'GET', '/api/leads');
+    assert.equal(cold.headers['x-leads-cache'], 'miss');
+    assert.equal(cold.json[0].status, 'new');
+    const patched = await call(app, 'PATCH', '/api/leads/2', { status: 'contacted', notes: 'liguei hoje' });
+    assert.equal(patched.status, 200);
+    assert.equal(patched.json.status, 'contacted');
+    const started = Date.now();
+    const warm = await call(app, 'GET', '/api/leads');
+    const elapsed = Date.now() - started;
+    assert.ok(elapsed < 1000, `warm GET after write took ${elapsed}ms`);
+    assert.equal(warm.headers['x-leads-cache'], 'hit');
+    assert.equal(warm.json[0].status, 'contacted');
+    assert.equal(warm.json[0].notes, 'liguei hoje');
+    assert.equal(listCalls, 1);
+  });
+});
+
+test('the inbox hydrates a saved list and does not treat the first paint as empty', () => {
+  const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
+  const inbox = readFileSync(new URL('../views/Inbox.tsx', import.meta.url), 'utf8');
+  const cache = readFileSync(new URL('../leadCache.ts', import.meta.url), 'utf8');
+  const copy = readFileSync(new URL('../utils.ts', import.meta.url), 'utf8');
+  const server = readFileSync(new URL('./sheetClient.js', import.meta.url), 'utf8');
+  assert.match(app, /useState\(true\)/);
+  assert.match(app, /readCachedLeads/);
+  assert.match(app, /writeCachedLeads/);
+  assert.match(app, /fetchLeads\(\{ fresh: true \}\)/);
+  assert.match(cache, /gosmile-leads-swr-v1/);
+  assert.match(cache, /localStorage/);
+  assert.match(copy, /A atualizar…/);
+  assert.match(copy, /if \(isLoading\) return 'A atualizar…'/);
+  assert.match(inbox, /listStatusCopy/);
+  assert.match(inbox, /Nenhuma lead na inbox\./);
+  assert.match(server, /leads-cache\.json/);
+  assert.doesNotMatch(server, /leads\.json/);
+  assert.match(readFileSync(new URL('../README.md', import.meta.url), 'utf8'), /MacMini-leads-swr-v1/);
 });
 
 test('inbox menu keeps Descartadas and leaves scheduled leads on the dock', () => {

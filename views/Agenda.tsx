@@ -4,7 +4,7 @@ import LeadPhone from '../components/LeadPhone';
 import LeadRowMain from '../components/LeadRowMain';
 import StatusMove from '../components/StatusMove';
 import { Lead } from '../types';
-import { formatCurrency, sortLeadsNewestFirst } from '../utils';
+import { formatCurrency, listStatusCopy, sortLeadsNewestFirst } from '../utils';
 
 interface AgendaProps {
   leads: Lead[];
@@ -13,9 +13,11 @@ interface AgendaProps {
   onSync: () => void;
   monthLabel: string;
   isSyncing?: boolean;
+  isLoading?: boolean;
+  listSettled?: boolean;
 }
 
-const Agenda: React.FC<AgendaProps> = ({ leads, onUpdateStatus, onSendReminder, monthLabel, isSyncing }) => {
+const Agenda: React.FC<AgendaProps> = ({ leads, onUpdateStatus, onSendReminder, monthLabel, isSyncing, isLoading, listSettled }) => {
   const [selected, setSelected] = useState<Lead | null>(null);
   const [budget, setBudget] = useState('');
 
@@ -33,8 +35,11 @@ const Agenda: React.FC<AgendaProps> = ({ leads, onUpdateStatus, onSendReminder, 
 
   return (
     <div>
+      {isLoading && leads.length > 0 ? <p className="updating">A atualizar…</p> : null}
       {leads.length === 0 ? (
-        <p className="center-note">Nenhuma lead marcada em {monthLabel.toLowerCase()}.</p>
+        <p className="center-note">
+          {listStatusCopy(isLoading, listSettled, `Nenhuma lead marcada em ${monthLabel.toLowerCase()}.`)}
+        </p>
       ) : (
         <div>
           {sortLeadsNewestFirst(leads).map((lead) => (

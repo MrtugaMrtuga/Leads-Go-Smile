@@ -1,11 +1,13 @@
 import React, { useMemo, useState } from 'react';
 import { Lead } from '../types';
-import { closeWindow } from '../utils';
+import { closeWindow, listStatusCopy } from '../utils';
 
 interface DashboardProps {
   leads: Lead[];
-  allLeads: Lead[];
+  allLeads?: Lead[];
   monthLabel: string;
+  isLoading?: boolean;
+  listSettled?: boolean;
 }
 
 type Span = 7 | 30 | 90;
@@ -108,10 +110,10 @@ const EvolutionChart: React.FC<{ points: Point[]; mode: Mode }> = ({ points, mod
   );
 };
 
-const Dashboard: React.FC<DashboardProps> = ({ allLeads }) => {
+const Dashboard: React.FC<DashboardProps> = ({ allLeads, isLoading, listSettled }) => {
   const [span, setSpan] = useState<Span>(30);
   const [mode, setMode] = useState<Mode>('line');
-  const series = useMemo(() => closeWindow(allLeads, span), [allLeads, span]);
+  const series = useMemo(() => closeWindow(allLeads || [], span), [allLeads, span]);
   const { totals } = series;
 
   const kpis = [
@@ -155,8 +157,11 @@ const Dashboard: React.FC<DashboardProps> = ({ allLeads }) => {
         </div>
       </div>
 
+      {isLoading && series.points.length > 0 ? <p className="updating">A atualizar…</p> : null}
       {series.points.length === 0 ? (
-        <p className="center-note">Ainda não há datas para a evolução.</p>
+        <p className="center-note">
+          {listStatusCopy(isLoading, listSettled, 'Ainda não há datas para a evolução.')}
+        </p>
       ) : (
         <EvolutionChart points={series.points} mode={mode} />
       )}

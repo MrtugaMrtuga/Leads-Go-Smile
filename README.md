@@ -10,6 +10,14 @@ O browser só fala com `/api` no mesmo origin. O segredo do Apps Script fica no 
 
 PIN de acesso: **2000** (sessionStorage `gosmile-leads-unlocked`).
 
+## Cache (stale-while-revalidate)
+
+A Google Sheet continua a ser a única fonte de verdade. `data/leads.json` não é lido. Etiqueta sugerida: `MacMini-leads-swr-v1`.
+
+`GET /api/leads` guarda a última lista boa em memória durante **45s** (`LEADS_CACHE_TTL_MS`; no Mini, 30–60s) e, em paralelo, em `data/leads-cache.json`. Esse ficheiro só acelera o arranque: não se restaura como base e pode apagar-se. Se a cache está dentro do TTL, a resposta sai logo (`X-Leads-Cache: hit`). Se está velha, a resposta sai logo com esses dados (`stale`) e o Mini pede a folha em fundo. Só sem cache nenhuma (arranque a frio) o pedido espera pelo Apps Script (`miss`). A segunda chamada com a cache quente fica abaixo de 1s. `GET /api/leads?fresh=1` espera pela revalidação que já está a correr.
+
+No browser, a última lista boa fica em `localStorage` (`gosmile-leads-swr-v1`). Ao abrir, a inbox mostra essa lista e «A atualizar…». «Nenhuma lead na inbox.» só aparece depois de uma leitura concluída com zero leads.
+
 ## Pipeline (Inbox, Marcadas, Descartadas)
 
 A cor ao lado do nome e as listas vêm da coluna **Estado** e do prefixo em **Comentários**. Não há variável nova no Mini. A única coluna que o script pode acrescentar é **Data fecho**.
@@ -73,7 +81,7 @@ O servidor Express serve `dist/` e `/api` na mesma porta. Ver [DEPLOY.md](./DEPL
 | Método | Caminho | Descrição |
 | --- | --- | --- |
 | GET | `/api/health` | Estado. `storage` é `apps-script`; `configured` diz se o Mini tem URL e segredo |
-| GET | `/api/leads` | Leads da aba Leads (2024 - 2026) com data de contacto >= 2026-09-01 (proxy server-side) |
+| GET | `/api/leads` | Leads da aba Leads (2024 - 2026) com data de contacto >= 2026-09-01. Cache curta no Mini (memória + `data/leads-cache.json`); `?fresh=1` espera a revalidação |
 | POST | `/api/sync/inbound-meta` | Já não importa CSV nem JSON. Devolve a contagem actual da folha |
 | POST | `/api/leads` | Acrescenta uma linha (nome, telefone, email, notas) |
 | GET | `/api/leads/:id` | Lê uma lead (`id` = número da linha) |
@@ -82,4 +90,4 @@ O servidor Express serve `dist/` e `/api` na mesma porta. Ver [DEPLOY.md](./DEPL
 | GET / PUT | `/api/settings` | Comissão local |
 | GET / POST | `/api/reminders` | Lembretes só em disco |
 
-`data/settings.json` e `data/reminders.json` continuam locais. `data/leads.json` e `data/seed-leads.json` são um stub `[]`.
+`data/settings.json` e `data/reminders.json` continuam locais. `data/leads.json` e `data/seed-leads.json` são um stub `[]`. `data/leads-cache.json` é só a cópia stale-while-revalidate.

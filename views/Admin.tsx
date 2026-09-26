@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import LeadRowMain from '../components/LeadRowMain';
 import { Lead } from '../types';
-import { formatCurrency, sortLeadsNewestFirst } from '../utils';
+import { formatCurrency, listStatusCopy, sortLeadsNewestFirst } from '../utils';
 
 interface AdminProps {
   settings: { commissionPercent: number };
@@ -10,6 +10,8 @@ interface AdminProps {
   onUpdateStatus: (id: string, updates: Partial<Lead>, extraData?: any) => void;
   onOpenTrash: () => void;
   onOpenAccounts: () => void;
+  isLoading?: boolean;
+  listSettled?: boolean;
 }
 
 const Admin: React.FC<AdminProps> = ({
@@ -19,6 +21,8 @@ const Admin: React.FC<AdminProps> = ({
   onUpdateStatus,
   onOpenTrash,
   onOpenAccounts,
+  isLoading,
+  listSettled,
 }) => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const [username, setUsername] = useState('');
@@ -101,7 +105,7 @@ const Admin: React.FC<AdminProps> = ({
       ) : (
         <div className="list">
           {completedLeads.length === 0 && paidLeads.length === 0 ? (
-            <p className="center-note">Sem pagamentos.</p>
+            <p className="center-note">{listStatusCopy(isLoading, listSettled, 'Sem pagamentos.')}</p>
           ) : (
             <>
               {completedLeads.map((lead) => (

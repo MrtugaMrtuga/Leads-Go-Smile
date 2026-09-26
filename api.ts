@@ -1,5 +1,7 @@
 import { AdminSettings, Lead } from './types';
 
+export type LeadsCacheHeader = 'hit' | 'stale' | 'miss' | 'unconfigured';
+
 export interface InboundMetaSyncResult {
   ok: boolean;
   sheetId?: string;
@@ -28,8 +30,21 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-export function fetchLeads() {
-  return request<Lead[]>('/api/leads');
+export async function fetchLeads(options?: { fresh?: boolean }): Promise<{ leads: Lead[]; cache: LeadsCacheHeader }> {
+  const path = options?.fresh ? '/api/leads?fresh=1' : '/api/leads';
+  const response = await fetch(path, {
+    headers: { Accept: 'application/json' },
+    cache: 'no-store',
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = data && typeof data === 'object' && 'error' in data ? String(data.error) : '';
+    throw new Error(message || `Erro ${response.status} em ${path}`);
+  }
+  const header = response.headers.get('X-Leads-Cache') || '';
+  const cache: LeadsCacheHeader =
+    header === 'hit' || header === 'stale' || header === 'miss' || header === 'unconfigured' ? header : 'miss';
+  return { leads: data as Lead[], cache };
 }
 
 export function syncInboundMeta() {

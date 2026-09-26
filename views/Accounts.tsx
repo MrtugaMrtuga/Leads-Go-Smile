@@ -1,7 +1,7 @@
 import React from 'react';
 import LeadRowMain from '../components/LeadRowMain';
 import { Lead } from '../types';
-import { formatCurrency, sortLeadsNewestFirst } from '../utils';
+import { formatCurrency, listStatusCopy, sortLeadsNewestFirst } from '../utils';
 
 interface AccountsProps {
   leads: Lead[];
@@ -9,13 +9,18 @@ interface AccountsProps {
   onSync: () => void;
   monthLabel: string;
   isSyncing?: boolean;
+  isLoading?: boolean;
+  listSettled?: boolean;
 }
 
-const Accounts: React.FC<AccountsProps> = ({ leads, onUpdateStatus, monthLabel, isSyncing }) => {
+const Accounts: React.FC<AccountsProps> = ({ leads, onUpdateStatus, monthLabel, isSyncing, isLoading, listSettled }) => {
   return (
     <div>
+      {isLoading && leads.length > 0 ? <p className="updating">A atualizar…</p> : null}
       {leads.length === 0 ? (
-        <p className="center-note">Nenhuma conta em {monthLabel.toLowerCase()}.</p>
+        <p className="center-note">
+          {listStatusCopy(isLoading, listSettled, `Nenhuma conta em ${monthLabel.toLowerCase()}.`)}
+        </p>
       ) : (
         <div className="list">
           {sortLeadsNewestFirst(leads).map((lead) => (
