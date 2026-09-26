@@ -4,7 +4,7 @@ import LeadPhone from '../components/LeadPhone';
 import LeadRowMain from '../components/LeadRowMain';
 import StatusMove from '../components/StatusMove';
 import { Lead } from '../types';
-import { filledLeadFields, listBucket, nextPipelineStatus, sortLeadsNewestFirst } from '../utils';
+import { filledLeadFields, listBucket, listStatusCopy, nextPipelineStatus, sortLeadsNewestFirst } from '../utils';
 
 interface InboxProps {
   leads: Lead[];
@@ -13,12 +13,14 @@ interface InboxProps {
   onSync: () => void;
   monthLabel: string;
   isSyncing?: boolean;
+  isLoading?: boolean;
+  listSettled?: boolean;
 }
 
 type Filter = 'inbox' | 'descartadas';
 type ModalType = 'none' | 'comment' | 'discard' | 'schedule' | 'create';
 
-const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSyncing }) => {
+const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSyncing, isLoading, listSettled }) => {
   const [filter, setFilter] = useState<Filter>('inbox');
   const [activeModal, setActiveModal] = useState<ModalType>('none');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
@@ -120,9 +122,14 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
         </button>
       </div>
 
+      {isLoading && visible.length > 0 ? <p className="updating">A atualizar…</p> : null}
       {visible.length === 0 ? (
         <p className="center-note">
-          {filter === 'descartadas' ? 'Nenhuma lead descartada.' : 'Nenhuma lead na inbox.'}
+          {listStatusCopy(
+            isLoading,
+            listSettled,
+            filter === 'descartadas' ? 'Nenhuma lead descartada.' : 'Nenhuma lead na inbox.'
+          )}
         </p>
       ) : (
         <div className="list">

@@ -8,6 +8,7 @@ import {
   createInboundLead,
   getInboundLead,
   listInboundLeads,
+  rememberInboundLead,
   SheetError,
   updateInboundLead,
 } from './sheetClient.js';
@@ -146,10 +147,13 @@ export function createApiRouter() {
     });
   });
 
-  api.get('/leads', async (_req, res) => {
+  api.get('/leads', async (req, res) => {
     try {
-      const { leads } = await listInboundLeads();
-      res.json(leads);
+      const fresh = String(req.query.fresh || '') === '1';
+      const result = await listInboundLeads({ fresh });
+      res.set('Cache-Control', 'no-store');
+      res.set('X-Leads-Cache', result.cache);
+      res.json(result.leads);
     } catch (error) {
       sendSheetError(res, error);
     }
@@ -189,6 +193,7 @@ export function createApiRouter() {
     }
     try {
       const lead = await createInboundLead(input);
+      rememberInboundLead(lead);
       res.status(201).json(lead);
     } catch (error) {
       sendSheetError(res, error);
@@ -200,6 +205,7 @@ export function createApiRouter() {
     try {
       const lead = await updateInboundLead(req.params.id, updates);
       if (!lead) return res.status(404).json({ error: 'Lead não encontrada' });
+      rememberInboundLead(lead);
       res.json(lead);
     } catch (error) {
       sendSheetError(res, error);

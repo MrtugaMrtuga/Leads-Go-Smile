@@ -27,6 +27,13 @@ export function sortLeadsNewestFirst<T extends { timestamp?: string; dataContact
   return sortLeadsNewestFirstJs(leads) as T[];
 }
 
+/** Empty copy is only for a finished fetch that really returned zero rows. */
+export function listStatusCopy(isLoading: boolean | undefined, listSettled: boolean | undefined, emptyText: string) {
+  if (isLoading) return 'A atualizar…';
+  if (!listSettled) return 'Não foi possível actualizar.';
+  return emptyText;
+}
+
 export function filledLeadFields(lead: Lead): LeadFormField[] {
   return filledLeadFieldsJs(lead) as LeadFormField[];
 }

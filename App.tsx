@@ -9,25 +9,46 @@ import Admin from './views/Admin';
 import { AppView, Lead, AdminSettings, LeadUpdatePayload } from './types';
 import { formatMonthYear, getLeadsByMonth, mapDataToLeads, sortLeadsNewestFirst } from './utils';
 import { createLead, fetchHealth, fetchLeads, fetchSettings, saveSettings, sendReminder, updateLead } from './api';
+import { readCachedLeads, writeCachedLeads } from './leadCache';
+
+function leadsFromCache(): Lead[] {
+  const cached = readCachedLeads();
+  return cached ? sortLeadsNewestFirst(mapDataToLeads(cached)) : [];
+}
 
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<AppView>('inbox');
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [leads, setLeads] = useState<Lead[]>(leadsFromCache);
+  const [isLoading, setIsLoading] = useState(true);
+  const [listSettled, setListSettled] = useState(() => readCachedLeads() !== null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [settings, setSettings] = useState<AdminSettings>({ commissionPercent: 3 });
 
+  const applyLeads = useCallback((nextLeads: Lead[]) => {
+    const mapped = sortLeadsNewestFirst(mapDataToLeads(nextLeads));
+    setLeads(mapped);
+    writeCachedLeads(mapped);
+    setListSettled(true);
+    return mapped;
+  }, []);
+
   const loadLeads = useCallback(async () => {
     setIsLoading(true);
     setFetchError(null);
     try {
-      const [nextLeads, nextSettings, health] = await Promise.all([fetchLeads(), fetchSettings(), fetchHealth()]);
-      setLeads(sortLeadsNewestFirst(mapDataToLeads(nextLeads)));
+      const [next, nextSettings, health] = await Promise.all([fetchLeads(), fetchSettings(), fetchHealth()]);
       setSettings(nextSettings);
-      if (health.configured === false) {
+      if (next.cache === 'unconfigured' || health.configured === false) {
         setFetchError('Defina APPS_SCRIPT_URL e APPS_SCRIPT_SECRET no Mini');
+        if (readCachedLeads() === null) applyLeads(next.leads);
+      } else {
+        applyLeads(next.leads);
+        if (next.cache === 'stale') {
+          const fresh = await fetchLeads({ fresh: true });
+          applyLeads(fresh.leads);
+        }
       }
     } catch (error) {
       console.error(error);
@@ -35,7 +56,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [applyLeads]);
 
   useEffect(() => {
     loadLeads();
@@ -56,11 +77,19 @@ const App: React.FC = () => {
       payload.discardReason = motivo;
     }
 
-    setLeads((prev) => prev.map((lead) => (lead.id === id ? { ...lead, ...payload } as Lead : lead)));
+    setLeads((prev) => {
+      const next = prev.map((lead) => (lead.id === id ? { ...lead, ...payload } as Lead : lead));
+      writeCachedLeads(next);
+      return next;
+    });
     setIsSyncing(true);
     try {
       const saved = await updateLead(id, payload);
-      setLeads((prev) => prev.map((lead) => (lead.id === id ? saved : lead)));
+      setLeads((prev) => {
+        const next = prev.map((lead) => (lead.id === id ? saved : lead));
+        writeCachedLeads(next);
+        return next;
+      });
     } catch (error) {
       console.error('Failed to sync:', error);
       setFetchError('Erro ao guardar lead');
@@ -75,7 +104,11 @@ const App: React.FC = () => {
     setIsSyncing(true);
     try {
       const lead = await createLead({ ...input, status: 'new', source: 'Manual' });
-      setLeads((prev) => sortLeadsNewestFirst([lead, ...prev.filter((item) => item.id !== lead.id)]));
+      setLeads((prev) => {
+        const next = sortLeadsNewestFirst([lead, ...prev.filter((item) => item.id !== lead.id)]);
+        writeCachedLeads(next);
+        return next;
+      });
     } catch (error) {
       console.error(error);
       setFetchError('Erro ao criar lead');
@@ -121,7 +154,15 @@ const App: React.FC = () => {
   const renderView = () => {
     switch (activeView) {
       case 'resumo':
-        return <Dashboard leads={currentLeads} allLeads={leads} monthLabel={monthLabel} />;
+        return (
+          <Dashboard
+            leads={currentLeads}
+            allLeads={leads}
+            monthLabel={monthLabel}
+            isLoading={isLoading}
+            listSettled={listSettled}
+          />
+        );
       case 'inbox':
         return (
           <Inbox
@@ -131,6 +172,8 @@ const App: React.FC = () => {
             onSync={loadLeads}
             monthLabel={monthLabel}
             isSyncing={isSyncing}
+            isLoading={isLoading}
+            listSettled={listSettled}
           />
         );
       case 'lixo':
@@ -141,6 +184,8 @@ const App: React.FC = () => {
             onSync={loadLeads}
             monthLabel={monthLabel}
             isSyncing={isSyncing}
+            isLoading={isLoading}
+            listSettled={listSettled}
           />
         );
       case 'visitas':
@@ -152,6 +197,8 @@ const App: React.FC = () => {
             onSync={loadLeads}
             monthLabel={monthLabel}
             isSyncing={isSyncing}
+            isLoading={isLoading}
+            listSettled={listSettled}
           />
         );
       case 'contas':
@@ -162,6 +209,8 @@ const App: React.FC = () => {
             onSync={loadLeads}
             monthLabel={monthLabel}
             isSyncing={isSyncing}
+            isLoading={isLoading}
+            listSettled={listSettled}
           />
         );
       case 'admin':
@@ -173,10 +222,20 @@ const App: React.FC = () => {
             onUpdateStatus={handleLeadAction}
             onOpenTrash={() => setActiveView('lixo')}
             onOpenAccounts={() => setActiveView('contas')}
+            isLoading={isLoading}
+            listSettled={listSettled}
           />
         );
       default:
-        return <Dashboard leads={currentLeads} monthLabel={monthLabel} />;
+        return (
+          <Dashboard
+            leads={currentLeads}
+            allLeads={leads}
+            monthLabel={monthLabel}
+            isLoading={isLoading}
+            listSettled={listSettled}
+          />
+        );
     }
   };
 

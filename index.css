@@ -713,6 +713,12 @@ textarea.field:focus {
   padding: 24px 0;
 }
 
+.updating {
+  color: var(--mute);
+  font-size: 13px;
+  padding: 0 0 8px;
+}
+
 .choice-grid {
   display: flex;
   gap: 8px;

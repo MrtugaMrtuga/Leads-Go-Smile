@@ -3,8 +3,13 @@
  * The secret stays in the Mini environment and is never sent to the browser.
  */
 
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { SHEET_TAB, filterLeadsForApp, leadFromSheetRow, mapDataToLeads } from '../shared/inboundMeta.js';
 import { leadPatchToFields, PipelineError } from '../shared/sheetWrite.js';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 const PLACEHOLDER = /replace_with|changeme|your[-_ ]?secret/i;
 
@@ -51,7 +56,7 @@ function leadFromPayload(payload) {
 
 const GAS_TIMEOUT_MS = Number(process.env.APPS_SCRIPT_TIMEOUT_MS || 55000);
 const GAS_RETRIES = Number(process.env.APPS_SCRIPT_RETRIES || 2);
-const LIST_CACHE_MS = Number(process.env.APPS_SCRIPT_LIST_CACHE_MS || 8000);
+const DEFAULT_LIST_TTL_MS = 45_000;
 
 function isTransientFetchError(error) {
   const name = String(error?.name || '');
@@ -71,8 +76,115 @@ function enqueueGas(task) {
   return run;
 }
 
-let listCache = { at: 0, value: null };
-let listInflight = null;
+/** Last good sheet list. Not the source of truth — the sheet is. */
+let listCache = null;
+let revision = 0;
+let revalidateFlight = null;
+let hydrateFlight = null;
+let persistQueue = Promise.resolve();
+
+function dataDir() {
+  return process.env.LEADS_DATA_DIR || join(__dirname, '..', 'data');
+}
+
+function cacheFile() {
+  return join(dataDir(), 'leads-cache.json');
+}
+
+function cacheTtlMs() {
+  const raw = Number(process.env.LEADS_CACHE_TTL_MS);
+  if (Number.isFinite(raw) && raw > 0) return raw;
+  return DEFAULT_LIST_TTL_MS;
+}
+
+function isFresh(cache) {
+  return Boolean(cache && Array.isArray(cache.leads) && Date.now() - cache.at < cacheTtlMs());
+}
+
+async function hydrateFromDisk() {
+  if (listCache) return;
+  if (!hydrateFlight) {
+    hydrateFlight = (async () => {
+      try {
+        const raw = JSON.parse(await readFile(cacheFile(), 'utf8'));
+        const at = Number(raw?.at);
+        if (!listCache && raw && Array.isArray(raw.leads) && Number.isFinite(at)) {
+          listCache = { at, leads: raw.leads };
+        }
+      } catch (error) {
+        if (error?.code !== 'ENOENT') console.error('leads-cache', error.message);
+      }
+    })();
+  }
+  await hydrateFlight;
+}
+
+function persistCache(snapshot) {
+  const file = cacheFile();
+  persistQueue = persistQueue
+    .then(async () => {
+      await mkdir(dirname(file), { recursive: true });
+      const tmp = `${file}.${process.pid}.tmp`;
+      await writeFile(
+        tmp,
+        `${JSON.stringify({ at: snapshot.at, savedAt: new Date(snapshot.at).toISOString(), leads: snapshot.leads })}\n`,
+        'utf8'
+      );
+      await rename(tmp, file);
+    })
+    .catch((error) => {
+      console.error('leads-cache', error.message);
+    });
+}
+
+function commitCache(leads) {
+  const snapshot = { at: Date.now(), leads };
+  listCache = snapshot;
+  persistCache(snapshot);
+  return snapshot;
+}
+
+function revalidate(gasOptions) {
+  const seen = revision;
+  if (revalidateFlight) {
+    return revalidateFlight.then(() => {
+      if (seen !== revision) return revalidate(gasOptions);
+      return listCache;
+    });
+  }
+
+  const task = (async () => {
+    try {
+      const payload = await gasRequest({ action: 'leads', method: 'GET', ...gasOptions });
+      const leads = filterLeadsForApp(leadsFromPayload(payload));
+      if (seen !== revision) return listCache;
+      return commitCache(leads);
+    } finally {
+      revalidateFlight = null;
+    }
+  })();
+
+  revalidateFlight = task;
+  return task;
+}
+
+export async function clearLeadsListCache() {
+  revision += 1;
+  listCache = null;
+  hydrateFlight = null;
+  revalidateFlight = null;
+  await persistQueue;
+  await rm(cacheFile(), { force: true });
+}
+
+/** Fold a sheet write into the warm list so the next GET does not serve the pre-write snapshot. */
+export function rememberInboundLead(lead) {
+  if (!lead || typeof lead !== 'object') return;
+  revision += 1;
+  if (!listCache || !Array.isArray(listCache.leads)) return;
+  const without = listCache.leads.filter((item) => String(item.id) !== String(lead.id));
+  commitCache(filterLeadsForApp([...without, lead]));
+}
 
 async function fetchFollowing(url, { method = 'GET', body, fetchImpl }) {
   const fetchFn = fetchImpl || globalThis.fetch;
@@ -202,27 +314,35 @@ export async function gasRequest({ action, method = 'GET', body, fetchImpl, env 
 
 export async function listInboundLeads(options = {}) {
   const cfg = appsScriptConfig(options.env);
-  if (!cfg.configured) return { leads: [], configured: false };
+  if (!cfg.configured) return { leads: [], configured: false, cache: 'unconfigured' };
 
-  const now = Date.now();
-  if (!options.bypassCache && listCache.value && now - listCache.at < LIST_CACHE_MS) {
-    return { leads: listCache.value, configured: true };
+  const { fresh = false, bypassCache = false, ...gasOptions } = options;
+  await hydrateFromDisk();
+  const hadCache = Boolean(listCache && Array.isArray(listCache.leads));
+
+  if (!bypassCache && hadCache && isFresh(listCache)) {
+    return { leads: listCache.leads, configured: true, cache: 'hit' };
   }
-  if (!options.bypassCache && listInflight) {
-    return listInflight;
+
+  if (!bypassCache && hadCache && !fresh) {
+    void revalidate(gasOptions).catch((error) => {
+      console.error('leads revalidate', error?.message || error);
+    });
+    return { leads: listCache.leads, configured: true, cache: 'stale' };
   }
 
-  const task = (async () => {
-    const payload = await gasRequest({ action: 'leads', method: 'GET', ...options });
-    const leads = filterLeadsForApp(leadsFromPayload(payload));
-    listCache = { at: Date.now(), value: leads };
-    return { leads, configured: true };
-  })();
-
-  listInflight = task.finally(() => {
-    listInflight = null;
-  });
-  return listInflight;
+  try {
+    const snapshot = await revalidate(gasOptions);
+    if (!snapshot || !Array.isArray(snapshot.leads)) {
+      throw new SheetError(`Folha «${SHEET_TAB}» indisponível`);
+    }
+    return { leads: snapshot.leads, configured: true, cache: hadCache ? 'hit' : 'miss' };
+  } catch (error) {
+    if (hadCache && listCache && Array.isArray(listCache.leads)) {
+      return { leads: listCache.leads, configured: true, cache: 'stale' };
+    }
+    throw error;
+  }
 }
 
 export async function getInboundLead(id, options = {}) {
