@@ -33,6 +33,11 @@ function redact(value) {
 }
 
 function leadsFromPayload(payload) {
+  // The list is the built leads. Raw rows are only a fallback for an older /exec
+  // that still sends headers+rows and an empty leads array.
+  if (Array.isArray(payload?.leads) && payload.leads.length > 0) {
+    return mapDataToLeads(payload.leads);
+  }
   if (Array.isArray(payload?.headers) && Array.isArray(payload?.rows)) {
     return payload.rows
       .map((row) => leadFromSheetRow(payload.headers, row.values || [], Number(row?.row)))
@@ -565,19 +570,19 @@ export async function createInboundLead(input, options = {}) {
   return lead;
 }
 
-const DEFAULT_WARM_MS = 120_000;
+const DEFAULT_WARM_MS = 180_000;
 
 export function sheetWarmerConfig(env = process.env) {
   const raw = env.LEADS_WARM_MS;
   const intervalMs = raw === undefined || raw === '' ? DEFAULT_WARM_MS : Number(raw);
   const enabled = Number.isFinite(intervalMs) && intervalMs >= 60_000;
-  const action = String(env.LEADS_WARM_ACTION || 'leads').trim() || 'leads';
+  const action = String(env.LEADS_WARM_ACTION || 'ping').trim() || 'ping';
   return { enabled, intervalMs: enabled ? intervalMs : 0, action };
 }
 
 /**
- * Refill the Apps Script list cache (action=leads&fresh=1) so the next
- * Actualizar is a CacheService hit. LEADS_WARM_ACTION=ping only wakes /exec.
+ * Wake /exec so a cold start does not sit on the 55s abort. Default action=ping
+ * does not read the sheet. LEADS_WARM_ACTION=leads refills the list cache.
  */
 export function warmAppsScript() {
   const { configured } = appsScriptConfig();

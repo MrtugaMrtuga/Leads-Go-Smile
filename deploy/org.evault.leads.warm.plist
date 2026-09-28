@@ -15,7 +15,7 @@
     <string>http://127.0.0.1:3040/api/leads/warm</string>
   </array>
   <key>StartInterval</key>
-  <integer>120</integer>
+  <integer>180</integer>
   <key>RunAtLoad</key>
   <true/>
   <key>StandardOutPath</key>

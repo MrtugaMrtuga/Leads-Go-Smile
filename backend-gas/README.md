@@ -60,9 +60,9 @@ Reinicie o serviço. `GET /api/health` deve mostrar `"storage":"apps-script","co
 
 `GET /exec?secret=…&action=leads`
 
-Devolve JSON com `leads` (objectos com `id` = número da linha, `nome`, `telefone`, `email`, `dataContacto`, `formFields` das colunas preenchidas com o rótulo em português, e `crm`) e também `headers` + `rows` para o Mini normalizar. O Mini só mapeia `headers` + `rows`.
+Devolve JSON com `leads` (objectos com `id` = número da linha, `nome`, `telefone`, `email`, `dataContacto`, `contactDay`, `doctor`, `appointmentDate`, `value`, `formFields` e `crm`) e `rowsOmitted: true`. A lista não traz `headers` nem `rows`. O Mini mapeia `leads`. Uma resposta antiga, com `leads: []` mais `headers` e `rows`, continua a ser lida.
 
-A lista não lê a grelha toda. Lê a coluna do timestamp e depois só as colunas mapeadas das linhas em ou depois de `2026-09-01` (`sheetRead: "tail"`, `columns`, `sheetColumns`, `scannedRows`, `readRows`, `readMs`). Não repete o array `leads` (`leadsOmitted`); o Mini usa `headers` + `rows`. `CacheService` guarda esse JSON **180 segundos**. Sem `fresh=1` um hit não abre a folha — é o que o Actualizar pede. `fresh=1` ignora a cache (medição, e o refill do Mini). `update`, `create` e um `sync` que inseriu linhas chamam `bumpLeadsCache_`.
+A lista não lê a grelha toda. Lê a coluna do timestamp e depois só as colunas mapeadas das linhas em ou depois de `2026-09-01` (`sheetRead: "tail"`, `columns`, `sheetColumns`, `scannedRows`, `readRows`, `readMs`). `CacheService` guarda esse JSON **60 segundos**. Sem `fresh=1` um hit não abre a folha — é o que o Actualizar pede. `fresh=1` ignora a cache (medição). O ping do Mini não enche a cache. `update`, `create` e um `sync` que inseriu linhas chamam `bumpLeadsCache_`. `update` e `create` devolvem `headers`, `row` e `lead`.
 
 `GET /exec?secret=…&action=ping` responde sem abrir a folha. Serve para o Mini manter o `/exec` quente.
 

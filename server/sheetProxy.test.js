@@ -967,7 +967,7 @@ test('the inbox hydrates a saved list and does not treat the first paint as empt
   assert.match(readFileSync(new URL('../README.md', import.meta.url), 'utf8'), /MacMini-leads-swr-v1/);
 });
 
-test('refresh uses the Apps Script cache, warm refills it, and sync does not block it', async () => {
+test('refresh uses the Apps Script cache, warm pings by default, and sync does not block it', async () => {
   await clearLeadsListCache();
   process.env.LEADS_CACHE_TTL_MS = '45000';
   process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
@@ -978,14 +978,20 @@ test('refresh uses the Apps Script cache, warm refills it, and sync does not blo
   const leadsBranch = gas.slice(gas.indexOf("if (action === 'leads'"), gas.indexOf("if (action === 'update'"));
   const updateFn = gas.slice(gas.indexOf('function updateLead_'), gas.indexOf('function blankRow_'));
   const createFn = gas.slice(gas.indexOf('function createLead_'), gas.indexOf('function handle_'));
+  const listPayload = gas.slice(gas.indexOf('function tablePayload_'), gas.indexOf('function applyFields_'));
   assert.match(leadsBranch, /loadLeadsPayload_/);
   assert.doesNotMatch(leadsBranch, /readTable_/);
   const readFn = gas.slice(gas.indexOf('function readLeadsTable_'), gas.indexOf('function readHeaderAndRow_'));
   assert.match(gas, /function readLeadsTable_/);
-  assert.match(gas, /LEADS_CACHE_TTL_SEC = 180/);
+  assert.match(gas, /LEADS_CACHE_TTL_SEC = 60/);
   assert.match(gas, /function listColumnCount_/);
-  assert.match(gas, /leadsOmitted = true/);
-  assert.match(gas, /tablePayload_\(table, true\)/);
+  assert.match(gas, /rowsOmitted: true/);
+  assert.doesNotMatch(gas, /leadsOmitted/);
+  assert.doesNotMatch(gas, /tablePayload_\(table, true\)/);
+  assert.match(listPayload, /leads: leads/);
+  assert.doesNotMatch(listPayload, /headers:/);
+  assert.match(gas, /doctor: raw\.medico_orcamento/);
+  assert.match(gas, /function money_/);
   assert.match(readFn, /listColumnCount_/);
   assert.match(gas, /CacheService\.getScriptCache/);
   assert.match(gas, /bumpLeadsCache_/);
@@ -1005,6 +1011,9 @@ test('refresh uses the Apps Script cache, warm refills it, and sync does not blo
   assert.match(client, /lane === 'warm'/);
   assert.match(client, /sheetFresh/);
   assert.match(client, /writesInFlight/);
+  assert.match(client, /DEFAULT_WARM_MS = 180_000/);
+  assert.match(client, /LEADS_WARM_ACTION \|\| 'ping'/);
+  assert.match(client, /payload\?\.leads\) && payload\.leads\.length > 0/);
 
   let releaseSync = () => {};
   const syncGate = new Promise((resolve) => {
@@ -1041,19 +1050,20 @@ test('refresh uses the Apps Script cache, warm refills it, and sync does not blo
       });
     }, async () => {
       delete process.env.LEADS_WARM_ACTION;
-      const warm = await call(app, 'POST', '/api/leads/warm');
-      assert.equal(warm.status, 200);
-      assert.equal(warm.json.ok, true);
-      assert.equal(warm.json.skipped, false);
-      assert.equal(warm.json.contactCutoff, '2026-09-01');
-      assert.match(urls[0], /action=leads/);
-      assert.match(urls[0], /[?&]fresh=1/);
-
-      process.env.LEADS_WARM_ACTION = 'ping';
       const ping = await call(app, 'POST', '/api/leads/warm');
       assert.equal(ping.status, 200);
-      assert.match(urls[1], /action=ping/);
-      assert.doesNotMatch(urls[1], /action=leads/);
+      assert.equal(ping.json.ok, true);
+      assert.equal(ping.json.skipped, false);
+      assert.equal(ping.json.contactCutoff, '2026-09-01');
+      assert.match(urls[0], /action=ping/);
+      assert.doesNotMatch(urls[0], /action=leads/);
+      assert.doesNotMatch(urls[0], /[?&]fresh=1/);
+
+      process.env.LEADS_WARM_ACTION = 'leads';
+      const warm = await call(app, 'POST', '/api/leads/warm');
+      assert.equal(warm.status, 200);
+      assert.match(urls[1], /action=leads/);
+      assert.match(urls[1], /[?&]fresh=1/);
       delete process.env.LEADS_WARM_ACTION;
 
       const syncPromise = call(app, 'POST', '/api/leads/sync');
@@ -1072,6 +1082,7 @@ test('refresh uses the Apps Script cache, warm refills it, and sync does not blo
       assert.ok(elapsed < 1000, `refresh took ${elapsed}ms while sync was in flight`);
       const leadUrls = urls.filter((href) => href.includes('action=leads'));
       assert.equal(leadUrls.length, 2);
+      assert.match(leadUrls[0], /[?&]fresh=1/);
       assert.doesNotMatch(leadUrls[1], /[?&]fresh=1/);
       releaseSync();
       const sync = await syncPromise;
@@ -1082,6 +1093,61 @@ test('refresh uses the Apps Script cache, warm refills it, and sync does not blo
     delete process.env.LEADS_WARM_ACTION;
     releaseSync();
   }
+});
+
+test('a leads-only list keeps doctor, value and the contact cutoff', async () => {
+  await clearLeadsListCache();
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  const app = createApp();
+  await withFetch(async () => new Response(JSON.stringify({
+    ok: true,
+    sheetTab: 'Leads (2024 - 2026)',
+    contactCutoff: '2026-09-01',
+    rowsOmitted: true,
+    sheetRead: 'tail',
+    gasCache: 'hit',
+    readMs: 12,
+    gasCacheAgeMs: 400,
+    leads: [
+      {
+        id: '12',
+        row: 12,
+        name: 'Ida Cristina',
+        phone: '351962852158',
+        email: 'ida@example.com',
+        timestamp: '2026-09-20T17:14:04.000Z',
+        contactDay: '2026-09-20',
+        status: 'scheduled',
+        doctor: 'Bruno Aires',
+        appointmentDate: '2026-09-22',
+        value: 1500,
+        notes: 'marcada',
+      },
+      {
+        id: '3',
+        name: 'Lead Antiga',
+        phone: '351900000000',
+        timestamp: '2024-05-01T10:00:00.000Z',
+        contactDay: '2024-05-01',
+        status: 'new',
+        doctor: 'Nia',
+        value: 10,
+      },
+    ],
+  }), { status: 200, headers: { 'content-type': 'application/json' } }), async () => {
+    const refreshed = await call(app, 'POST', '/api/leads/refresh');
+    assert.equal(refreshed.status, 200);
+    assert.equal(refreshed.headers['x-leads-gas-cache'], 'hit');
+    assert.equal(refreshed.json.length, 1);
+    assert.equal(refreshed.json[0].name, 'Ida Cristina');
+    assert.equal(refreshed.json[0].doctor, 'Bruno Aires');
+    assert.equal(refreshed.json[0].appointmentDate, '2026-09-22');
+    assert.equal(refreshed.json[0].value, 1500);
+    assert.equal(refreshed.json[0].contactDay, '2026-09-20');
+    assert.equal(refreshed.json[0].status, 'scheduled');
+    assert.equal(refreshed.json.some((lead) => lead.name === 'Lead Antiga'), false);
+  });
 });
 
 test('inbox menu keeps Descartadas and leaves scheduled leads on the dock', () => {

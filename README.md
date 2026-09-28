@@ -34,17 +34,18 @@ O alvo de **menos de 2–3s** é um Actualizar com **hit** no `CacheService` (`X
 
 O que o script faz agora (publicar **versão nova** do `/exec`, senão o Mini muda e a folha não):
 
-- `action=leads` sem `fresh=1` devolve o JSON filtrado (≥ 2026-09-01) do `CacheService` durante **180s**. Um hit não abre a grelha. `update`, `create` e um sync que inseriu linhas chamam `bumpLeadsCache_`.
+- `action=leads` sem `fresh=1` devolve o JSON filtrado (≥ 2026-09-01) do `CacheService` durante **60s**. Um hit não abre a grelha. `update`, `create` e um sync que inseriu linhas chamam `bumpLeadsCache_`.
 - O Actualizar **não** manda `fresh=1`. Passa pelo Mini (não usa a memória dos 45s) e usa essa cache. `POST /api/leads/refresh?fresh=1` força a leitura, para medir o miss.
-- A leitura, quando acontece, é a coluna do timestamp e depois só as colunas mapeadas do bloco do corte (`X-Leads-Columns` vs `X-Leads-Sheet-Columns`). A lista não repete o array `leads`; o Mini monta as linhas.
-- O Node, a cada **2 minutos** (`LEADS_WARM_MS`, `0` desliga), chama `action=leads&fresh=1` e volta a encher a cache. `LEADS_WARM_ACTION=ping` só acorda o `/exec` e não lê a folha. O LaunchAgent [deploy/org.evault.leads.warm.plist](./deploy/org.evault.leads.warm.plist) é opcional e só entra se o intervalo do Node estiver desligado.
+- A leitura, quando acontece, é a coluna do timestamp e depois só as colunas mapeadas do bloco do corte (`X-Leads-Columns` vs `X-Leads-Sheet-Columns`). A lista devolve só `leads` (`rowsOmitted`): médico, data da consulta, valor e `contactDay` já vêm no objecto. O Mini usa esse array. `update` e `create` continuam a devolver `headers` + `row`.
+- O Node, a cada **3 minutos** (`LEADS_WARM_MS`, `0` desliga), chama `action=ping`. O ping não lê a folha: mantém o `/exec` acordado para o miss quente ficar nos 3–8s e não nos ~79s. `LEADS_WARM_ACTION=leads` manda `fresh=1` e volta a encher a cache. O LaunchAgent [deploy/org.evault.leads.warm.plist](./deploy/org.evault.leads.warm.plist) é opcional e só entra se o intervalo do Node estiver desligado.
 - A leitura não espera pelo sync.
 
 Como medir, depois do pull, do restart e da versão nova:
 
 ```bash
 # Hit: X-Leads-Gas-Cache: hit e X-Leads-Gas-Ms por baixo de 3000.
-# Acontece dentro de 180s depois de um refill (o warm, ou um refresh?fresh=1).
+# Acontece dentro de 60s depois de uma leitura da folha (refresh?fresh=1, ou LEADS_WARM_ACTION=leads).
+# O ping por omissão não enche a cache.
 curl -sS -D - -o /tmp/leads.json -X POST http://127.0.0.1:3040/api/leads/refresh
 
 # Miss, a leitura de ~3–8s já medida. Não é o alvo de 2–3s.
@@ -54,7 +55,7 @@ curl -sS -D - -o /dev/null -X POST 'http://127.0.0.1:3040/api/leads/refresh?fres
 # Pode voltar às dezenas de segundos. Não contar isso como o alvo.
 ```
 
-`X-Leads-Gas-Age-Ms` é a idade do JSON em cache. Uma gravação pela app zera a cache. Uma edição feita à mão na folha aparece no próximo `fresh=1` (o warm, ou o `?fresh=1`). `X-Leads-Sheet-Read: unknown` quer dizer que o `/exec` ainda é a versão antiga.
+`X-Leads-Gas-Age-Ms` é a idade do JSON em cache. Uma gravação pela app zera a cache. Uma edição feita à mão na folha aparece no próximo `fresh=1` ou quando os 60s passam. `X-Leads-Sheet-Read: unknown` quer dizer que o `/exec` ainda é a versão antiga.
 
 | Estado | Esperado |
 | --- | --- |
@@ -62,7 +63,7 @@ curl -sS -D - -o /dev/null -X POST 'http://127.0.0.1:3040/api/leads/refresh?fres
 | Quente, cache vazia (`?fresh=1` ou TTL a passar) | 3–8s, como no fumo (3,5s / 7,5s / 6,3s) |
 | `/exec` frio | pode voltar aos ~79s |
 
-O log está em `/tmp/evault-leads.out.log` (`gas action=… cache=hit|miss`). A folha continua a ser a fonte de verdade: o hit é uma leitura dessa folha com menos de 180s, invalidada quando a app escreve.
+O log está em `/tmp/evault-leads.out.log` (`gas action=… cache=hit|miss`). A folha continua a ser a fonte de verdade: o hit é uma leitura dessa folha com menos de 60s, invalidada quando a app escreve. O Horário é instantâneo porque lê uma célula (`Config!A1`). A lista de leads não cabe numa célula; o caminho curto é este hit.
 
 No browser, a última lista boa fica em `localStorage` (`gosmile-leads-swr-v1`). Ao abrir, a inbox mostra essa lista e «A atualizar…». «Nenhuma lead na inbox.» só aparece depois de uma leitura concluída com zero leads.
 
@@ -132,7 +133,7 @@ O servidor Express serve `dist/` e `/api` na mesma porta. Ver [DEPLOY.md](./DEPL
 | GET | `/api/leads` | Leads da aba Leads (2024 - 2026) com data de contacto >= 2026-09-01. Cache curta no Mini (memória + `data/leads-cache.json`); `?fresh=1` espera a revalidação |
 | POST | `/api/leads/sync` | Corre `action=sync` no Apps Script (Daniel → EVOB) e apaga a cache da lista. O segredo fica no Mini |
 | POST | `/api/leads/refresh` | Pede a lista ao Apps Script (não usa a memória do Mini). Com a cache do script ainda válida responde `X-Leads-Gas-Cache: hit`. `?fresh=1` força a leitura da folha |
-| POST | `/api/leads/warm` | Por omissão `action=leads&fresh=1`, para encher a cache. `LEADS_WARM_ACTION=ping` só acorda o `/exec`. O Node repete a cada 2 min |
+| POST | `/api/leads/warm` | Por omissão `action=ping` (não lê a folha). `LEADS_WARM_ACTION=leads` enche a cache com `fresh=1`. O Node repete a cada 3 min |
 | POST | `/api/sync/inbound-meta` | Já não importa CSV nem JSON. Devolve a contagem actual da folha |
 | POST | `/api/leads` | Acrescenta uma linha (nome, telefone, email, notas) |
 | GET | `/api/leads/:id` | Lê uma lead (`id` = número da linha) |

@@ -15,11 +15,11 @@
  * Data Contacto é texto de CRM e não decide a lista. update/create não aplicam este corte.
  * action=leads lê essa coluna com getDisplayValues (uma coluna), depois
  * getDisplayValues só das colunas mapeadas no bloco que passa o corte
- * (sheetRead=tail). A resposta da lista não repete o array leads.
- * CacheService guarda esse JSON 180s. Sem fresh=1, um hit não relê a folha.
- * fresh=1 ignora a cache (medição, e o ping de refill do Mini).
- * update/create e um sync com inserções chamam bumpLeadsCache_.
- * action=ping não lê a folha.
+ * (sheetRead=tail). A lista devolve só leads (rowsOmitted). O Mini não
+ * precisa das linhas cruas.
+ * CacheService guarda esse JSON 60s. Sem fresh=1, um hit não relê a folha.
+ * fresh=1 ignora a cache. update/create e um sync com inserções chamam
+ * bumpLeadsCache_. action=ping não lê a folha.
  * action=sync corre syncDanielToEvob e não muda o corte nem as outras ações.
  *
  * Segredo: propriedade do script APPS_SCRIPT_SECRET, igual à env do Mini.
@@ -365,7 +365,7 @@ function readTable_(sheet) {
 }
 
 var LEADS_CACHE_KEY = 'leads-list-v3';
-var LEADS_CACHE_TTL_SEC = 180;
+var LEADS_CACHE_TTL_SEC = 60;
 var LEADS_GEN_KEY = 'LEADS_LIST_GEN';
 
 function isDate_(value) {
@@ -492,23 +492,16 @@ function packLeadsCache_(gen, payload) {
     contactCutoff: payload.contactCutoff,
     contactCutoffTimeZone: payload.contactCutoffTimeZone,
     count: payload.count,
-    headers: payload.headers,
-    rows: payload.rows,
     leads: payload.leads,
+    rowsOmitted: true,
     scannedRows: payload.scannedRows,
     readRows: payload.readRows,
     readMs: payload.readMs,
     sheetRead: payload.sheetRead,
     columns: payload.columns,
-    sheetColumns: payload.sheetColumns,
-    leadsOmitted: payload.leadsOmitted
+    sheetColumns: payload.sheetColumns
   };
   var pack = JSON.stringify({ gen: gen, at: new Date().getTime(), payload: body });
-  if (pack.length > 60000) {
-    body.leads = [];
-    body.leadsOmitted = true;
-    pack = JSON.stringify({ gen: gen, at: new Date().getTime(), payload: body });
-  }
   if (pack.length > 60000) return '';
   return pack;
 }
@@ -533,7 +526,7 @@ function loadLeadsPayload_(force) {
 
   var started = new Date().getTime();
   var table = readLeadsTable_(getLeadsSheet_());
-  var payload = tablePayload_(table, true);
+  var payload = tablePayload_(table);
   payload.columns = table.columns || 0;
   payload.sheetColumns = table.sheetColumns || 0;
   payload.scannedRows = table.scannedRows || 0;
@@ -639,38 +632,42 @@ function buildLead_(headers, values, sheetRow) {
     isContacted: status !== 'new',
     source: raw.origem || '',
     sourceTab: SHEET_TAB,
+    doctor: raw.medico_orcamento || '',
+    appointmentDate: raw.data_primeira_consulta || '',
+    value: money_(raw.valor_real_bruto),
     formFields: formFields,
     crm: crm
   };
 }
 
-function tablePayload_(table, lean) {
+function money_(value) {
+  var text = String(value || '').replace(/€/g, '').replace(/\s/g, '');
+  if (!text) return 0;
+  if (text.indexOf(',') !== -1 && text.indexOf('.') !== -1) text = text.replace(/\./g, '').replace(',', '.');
+  else if (text.indexOf(',') !== -1) text = text.replace(',', '.');
+  var amount = Number(text);
+  return isFinite(amount) ? amount : 0;
+}
+
+function tablePayload_(table) {
   var leads = [];
-  var rows = [];
   table.rows.forEach(function (row) {
     var raw = rawFromRow_(table.headers, row.values);
     if (!passesContactCutoff_(raw)) return;
-    if (!raw.nome) return;
-    if (!lean) {
-      var lead = buildLead_(table.headers, row.values, row.row);
-      if (!lead) return;
-      leads.push(lead);
-    }
-    rows.push(row);
+    var lead = buildLead_(table.headers, row.values, row.row);
+    if (!lead) return;
+    leads.push(lead);
   });
-  var payload = {
+  return {
     ok: true,
     sheetId: SHEET_ID,
     sheetTab: SHEET_TAB,
     contactCutoff: CONTACT_CUTOFF_DAY,
     contactCutoffTimeZone: 'Europe/Lisbon',
-    count: lean ? rows.length : leads.length,
-    headers: table.headers,
-    rows: rows
+    count: leads.length,
+    leads: leads,
+    rowsOmitted: true
   };
-  if (lean) payload.leadsOmitted = true;
-  else payload.leads = leads;
-  return payload;
 }
 
 function applyFields_(sheet, rowNumber, fields) {
