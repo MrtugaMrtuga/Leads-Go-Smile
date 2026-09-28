@@ -45,6 +45,11 @@ function sheetPayload(values = IDA_VALUES, row = 2) {
     headers: HEADERS,
     rows: [{ row, values }],
     leads: [],
+    sheetRead: 'tail',
+    gasCache: 'miss',
+    readMs: 1,
+    readRows: 1,
+    scannedRows: 40,
   };
 }
 
@@ -589,8 +594,10 @@ test('fresh=1 and POST /api/leads/refresh bypass a warm TTL and reread the sheet
   let calls = 0;
   const app = createApp();
 
-  await withFetch(async () => {
+  await withFetch(async (url) => {
     calls += 1;
+    if (calls === 1) assert.doesNotMatch(String(url), /[?&]fresh=1/);
+    if (calls === 2) assert.match(String(url), /[?&]fresh=1/);
     const values = [...IDA_VALUES];
     if (calls > 1) values[2] = 'Lead Depois do Refresh';
     return new Response(JSON.stringify(sheetPayload(values)), {
@@ -620,6 +627,11 @@ test('fresh=1 and POST /api/leads/refresh bypass a warm TTL and reread the sheet
     assert.equal(refreshed.status, 200);
     assert.equal(refreshed.headers['x-leads-cache'], 'refresh');
     assert.equal(refreshed.headers['cache-control'], 'no-store');
+    assert.equal(refreshed.headers['x-leads-sheet-read'], 'tail');
+    assert.equal(refreshed.headers['x-leads-gas-cache'], 'miss');
+    assert.equal(refreshed.headers['x-leads-read-rows'], '1');
+    assert.equal(refreshed.headers['x-leads-scanned-rows'], '40');
+    assert.ok(Number(refreshed.headers['x-leads-gas-ms']) >= 0);
     assert.equal(refreshed.json[0].name, 'Lead Depois do Refresh');
     assert.equal(calls, 2);
 
@@ -690,7 +702,7 @@ test('the header refresh is an icon, one sheet read, and keeps the contact cutof
   assert.match(meta, /export const CONTACT_CUTOFF_DAY = '2026-09-01'/);
   assert.match(gas, /var CONTACT_CUTOFF_DAY = '2026-09-01'/);
   assert.match(syncGas, /syncDanielToEvob|function sync/);
-  assert.match(readme, /MacMini-leads-refresh-v2/);
+  assert.match(readme, /MacMini-leads-refresh-v3/);
   assert.match(readme, /2026-09-01/);
   assert.match(vite, /bypass\(req\)/);
   assert.match(vite, /\[a-z0-9\]/);
@@ -953,6 +965,110 @@ test('the inbox hydrates a saved list and does not treat the first paint as empt
   assert.match(server, /leads-cache\.json/);
   assert.doesNotMatch(server, /leads\.json/);
   assert.match(readFileSync(new URL('../README.md', import.meta.url), 'utf8'), /MacMini-leads-swr-v1/);
+});
+
+test('refresh bypasses the Apps Script cache, warm ping does not read the list, and sync does not block it', async () => {
+  await clearLeadsListCache();
+  process.env.LEADS_CACHE_TTL_MS = '45000';
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  const gas = readFileSync(new URL('../backend-gas/Code.gs', import.meta.url), 'utf8');
+  const syncGas = readFileSync(new URL('../backend-gas/SyncDaniel.gs', import.meta.url), 'utf8');
+  const client = readFileSync(new URL('./sheetClient.js', import.meta.url), 'utf8');
+  const leadsBranch = gas.slice(gas.indexOf("if (action === 'leads'"), gas.indexOf("if (action === 'update'"));
+  const updateFn = gas.slice(gas.indexOf('function updateLead_'), gas.indexOf('function blankRow_'));
+  const createFn = gas.slice(gas.indexOf('function createLead_'), gas.indexOf('function handle_'));
+  assert.match(leadsBranch, /loadLeadsPayload_/);
+  assert.doesNotMatch(leadsBranch, /readTable_/);
+  const readFn = gas.slice(gas.indexOf('function readLeadsTable_'), gas.indexOf('function readHeaderAndRow_'));
+  assert.match(gas, /function readLeadsTable_/);
+  assert.match(gas, /LEADS_CACHE_TTL_SEC = 30/);
+  assert.match(gas, /CacheService\.getScriptCache/);
+  assert.match(gas, /bumpLeadsCache_/);
+  assert.match(gas, /sheetRead = 'tail'/);
+  assert.match(gas, /action === 'ping'/);
+  assert.match(readFn, /getDisplayValues\(\)/);
+  assert.equal(readFn.split('getDisplayValues()').length - 1, 3);
+  assert.doesNotMatch(readFn, /getRange\(1, 1, height, lastColumn\)/);
+  assert.doesNotMatch(updateFn, /readTable_\(/);
+  assert.match(updateFn, /bumpLeadsCache_/);
+  assert.match(updateFn, /readHeaderAndRow_/);
+  assert.doesNotMatch(createFn, /readTable_\(/);
+  assert.match(syncGas, /readTable_/);
+  assert.match(syncGas, /bumpLeadsCache_/);
+  assert.match(syncGas, /CONTACT_CUTOFF_DAY/);
+  assert.match(client, /lane === 'read'/);
+  assert.match(client, /lane === 'warm'/);
+  assert.match(client, /sheetFresh/);
+  assert.match(client, /writesInFlight/);
+
+  let releaseSync = () => {};
+  const syncGate = new Promise((resolve) => {
+    releaseSync = resolve;
+  });
+  let markSync = () => {};
+  const syncStarted = new Promise((resolve) => {
+    markSync = resolve;
+  });
+  const urls = [];
+  const app = createApp();
+  try {
+    await withFetch(async (url) => {
+      const href = String(url);
+      urls.push(href);
+      const action = new URL(href).searchParams.get('action');
+      if (action === 'sync') {
+        markSync();
+        await syncGate;
+        return new Response(
+          JSON.stringify({ ok: true, scanned: 1, inserted: 0, skipped: 1, errors: 0, cutoff: '2026-09-01' }),
+          { status: 200, headers: { 'content-type': 'application/json' } }
+        );
+      }
+      if (action === 'ping') {
+        return new Response(JSON.stringify({ ok: true, pong: true, contactCutoff: '2026-09-01' }), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        });
+      }
+      return new Response(JSON.stringify(sheetPayload()), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }, async () => {
+      const warm = await call(app, 'POST', '/api/leads/warm');
+      assert.equal(warm.status, 200);
+      assert.equal(warm.json.ok, true);
+      assert.equal(warm.json.skipped, false);
+      assert.equal(warm.json.contactCutoff, '2026-09-01');
+      assert.match(urls[0], /action=ping/);
+      assert.doesNotMatch(urls[0], /action=leads/);
+
+      const syncPromise = call(app, 'POST', '/api/leads/sync');
+      await syncStarted;
+      const started = Date.now();
+      const refreshed = await Promise.race([
+        call(app, 'POST', '/api/leads/refresh'),
+        new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('refresh waited behind sync')), 1500);
+        }),
+      ]);
+      const elapsed = Date.now() - started;
+      assert.equal(refreshed.status, 200);
+      assert.equal(refreshed.headers['x-leads-cache'], 'refresh');
+      assert.equal(refreshed.headers['x-leads-sheet-read'], 'tail');
+      assert.ok(elapsed < 1000, `refresh took ${elapsed}ms while sync was in flight`);
+      const refreshUrl = urls.find((href) => href.includes('action=leads'));
+      assert.ok(refreshUrl);
+      assert.match(refreshUrl, /[?&]fresh=1/);
+      releaseSync();
+      const sync = await syncPromise;
+      assert.equal(sync.status, 200);
+      assert.equal(sync.json.cacheCleared, true);
+    });
+  } finally {
+    releaseSync();
+  }
 });
 
 test('inbox menu keeps Descartadas and leaves scheduled leads on the dock', () => {

@@ -10,8 +10,11 @@ import {
   listInboundLeads,
   rememberInboundLead,
   SheetError,
+  sheetWarmerConfig,
+  startSheetWarmer,
   syncDanielLeads,
   updateInboundLead,
+  warmAppsScript,
 } from './sheetClient.js';
 import { addReminder, getSettings, listReminders, retireLeadsJson, saveSettings } from './store.js';
 
@@ -131,11 +134,27 @@ function sendSheetError(res, error) {
   res.status(status).json({ error: message });
 }
 
+function sendLeads(res, result) {
+  res.set('Cache-Control', 'no-store');
+  res.set('X-Leads-Cache', result.cache);
+  if (result.gasMs != null) {
+    res.set('X-Leads-Gas-Ms', String(result.gasMs));
+    res.set('X-Leads-Gas-Cache', result.gasCache || 'miss');
+    res.set('X-Leads-Sheet-Read', result.sheetRead || 'unknown');
+    if (result.readMs != null) res.set('X-Leads-Read-Ms', String(result.readMs));
+    if (result.readRows != null) res.set('X-Leads-Read-Rows', String(result.readRows));
+    if (result.scannedRows != null) res.set('X-Leads-Scanned-Rows', String(result.scannedRows));
+    res.set('Server-Timing', `gas;dur=${result.gasMs}`);
+  }
+  res.json(result.leads);
+}
+
 export function createApiRouter() {
   const api = express.Router();
 
   api.get('/health', (_req, res) => {
     const config = appsScriptConfig();
+    const warm = sheetWarmerConfig();
     res.json({
       ok: true,
       app: 'GoSmile Leads',
@@ -145,16 +164,15 @@ export function createApiRouter() {
       contactCutoff: CONTACT_CUTOFF_DAY,
       contactCutoffTimeZone: 'Europe/Lisbon',
       configured: config.configured,
+      leadsWarmMs: warm.intervalMs,
+      leadsWarmAction: warm.action,
     });
   });
 
   api.get('/leads', async (req, res) => {
     try {
       const fresh = String(req.query.fresh || '') === '1';
-      const result = await listInboundLeads({ fresh });
-      res.set('Cache-Control', 'no-store');
-      res.set('X-Leads-Cache', result.cache);
-      res.json(result.leads);
+      sendLeads(res, await listInboundLeads({ fresh }));
     } catch (error) {
       sendSheetError(res, error);
     }
@@ -171,10 +189,22 @@ export function createApiRouter() {
 
   api.post('/leads/refresh', async (_req, res) => {
     try {
-      const result = await listInboundLeads({ bypassCache: true });
-      res.set('Cache-Control', 'no-store');
-      res.set('X-Leads-Cache', result.cache);
-      res.json(result.leads);
+      sendLeads(res, await listInboundLeads({ bypassCache: true }));
+    } catch (error) {
+      sendSheetError(res, error);
+    }
+  });
+
+  api.post('/leads/warm', async (_req, res) => {
+    try {
+      const started = Date.now();
+      const payload = await warmAppsScript();
+      res.json({
+        ok: true,
+        skipped: Boolean(payload?.skipped),
+        ms: Date.now() - started,
+        contactCutoff: payload?.contactCutoff || CONTACT_CUTOFF_DAY,
+      });
     } catch (error) {
       sendSheetError(res, error);
     }
@@ -307,5 +337,7 @@ if (process.env.EVAULT_NO_LISTEN !== '1') {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`GoSmile Leads listening on http://0.0.0.0:${PORT}`);
     console.log(`API: http://127.0.0.1:${PORT}/api  ·  PWA: https://leads.evob.org`);
+    const warm = startSheetWarmer();
+    if (warm.started) console.log(`Apps Script warm every ${warm.intervalMs}ms action=${warm.action}`);
   });
 }

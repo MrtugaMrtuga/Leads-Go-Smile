@@ -68,13 +68,72 @@ function isTransientSheetMessage(message) {
   return /HTML|indisponível|indisponivel|timeout|aborted|HTTP 5\d\d|Demasiados redireccionamentos/i.test(String(message || ''));
 }
 
-/** Serialize Apps Script calls — parallel stampede returns HTML 404 pages. */
-let gasQueue = Promise.resolve();
-function enqueueGas(task) {
-  const run = gasQueue.then(task, task);
-  gasQueue = run.then(() => undefined, () => undefined);
+/**
+ * Writes (update, create, sync) stay in one queue. Parallel calls to the same
+ * /exec often come back as an HTML 404 page.
+ * Reads (leads, ping, health) do not wait for that queue, so a refresh is not
+ * stuck behind Daniel sync. If a read still gets HTML while a write is in
+ * flight, it waits for the write and retries.
+ * A warm ping never joins the read queue: the next refresh does not wait for it.
+ */
+let readChain = Promise.resolve();
+let writeChain = Promise.resolve();
+let readPending = 0;
+let readActive = 0;
+let writePending = 0;
+let writesInFlight = 0;
+
+function settle(promise) {
+  return promise.then(
+    () => undefined,
+    () => undefined
+  );
+}
+
+function enqueueRead(task) {
+  readPending += 1;
+  const run = readChain.then(async () => {
+    readActive += 1;
+    try {
+      return await task();
+    } finally {
+      readActive -= 1;
+      readPending -= 1;
+    }
+  });
+  readChain = settle(run);
   return run;
 }
+
+function enqueueWrite(task) {
+  writePending += 1;
+  const run = writeChain.then(async () => {
+    writesInFlight += 1;
+    try {
+      return await task();
+    } finally {
+      writesInFlight -= 1;
+      writePending -= 1;
+    }
+  });
+  writeChain = settle(run);
+  return run;
+}
+
+function sheetBusy() {
+  return readPending > 0 || readActive > 0 || writePending > 0 || writesInFlight > 0;
+}
+
+function enqueueGas(task, lane = 'write') {
+  if (lane === 'warm') {
+    if (sheetBusy()) return Promise.resolve({ ok: true, skipped: true, reason: 'busy' });
+    return task();
+  }
+  if (lane === 'read') return enqueueRead(task);
+  return enqueueWrite(task);
+}
+
+const READ_ACTIONS = new Set(['leads', 'getLeads', 'ping', 'health']);
 
 /** Last good sheet list. Not the source of truth — the sheet is. */
 let listCache = null;
@@ -139,11 +198,34 @@ function persistCache(snapshot) {
     });
 }
 
-function commitCache(leads) {
-  const snapshot = { at: Date.now(), leads };
+function commitCache(leads, meta = {}) {
+  const snapshot = {
+    at: Date.now(),
+    leads,
+    gasMs: meta.gasMs ?? null,
+    gasCache: meta.gasCache || '',
+    sheetRead: meta.sheetRead || '',
+    readMs: meta.readMs ?? null,
+    readRows: meta.readRows ?? null,
+    scannedRows: meta.scannedRows ?? null,
+  };
   listCache = snapshot;
   persistCache(snapshot);
   return snapshot;
+}
+
+function metaFromPayload(payload, gasMs) {
+  const readMs = Number(payload?.readMs);
+  const readRows = Number(payload?.readRows);
+  const scannedRows = Number(payload?.scannedRows);
+  return {
+    gasMs,
+    gasCache: String(payload?.gasCache || ''),
+    sheetRead: String(payload?.sheetRead || ''),
+    readMs: Number.isFinite(readMs) ? readMs : null,
+    readRows: Number.isFinite(readRows) ? readRows : null,
+    scannedRows: Number.isFinite(scannedRows) ? scannedRows : null,
+  };
 }
 
 function revalidate(gasOptions) {
@@ -157,10 +239,17 @@ function revalidate(gasOptions) {
 
   const task = (async () => {
     try {
-      const payload = await gasRequest({ action: 'leads', method: 'GET', ...gasOptions });
+      const started = Date.now();
+      const payload = await gasRequest({
+        action: 'leads',
+        method: 'GET',
+        ...gasOptions,
+        fresh: Boolean(gasOptions.sheetFresh),
+        lane: 'read',
+      });
       const leads = filterLeadsForApp(leadsFromPayload(payload));
       if (seen !== revision) return listCache;
-      return commitCache(leads);
+      return commitCache(leads, metaFromPayload(payload, Date.now() - started));
     } finally {
       if (revalidateFlight === task) revalidateFlight = null;
     }
@@ -236,17 +325,28 @@ async function fetchFollowing(url, { method = 'GET', body, fetchImpl }) {
   throw new SheetError('Demasiados redireccionamentos do Apps Script');
 }
 
-export async function gasRequest({ action, method = 'GET', body, fetchImpl, env = process.env } = {}) {
+export async function gasRequest({
+  action,
+  method = 'GET',
+  body,
+  fetchImpl,
+  env = process.env,
+  fresh = false,
+  lane,
+} = {}) {
   const { url, secret, configured } = appsScriptConfig(env);
   if (!configured) throw new SheetError('Apps Script não configurado', 503);
 
   const endpoint = new URL(url);
   endpoint.searchParams.set('secret', secret);
   endpoint.searchParams.set('action', action);
+  if (fresh) endpoint.searchParams.set('fresh', '1');
 
   const attempts = Math.max(1, GAS_RETRIES + 1);
+  const laneName = lane || (READ_ACTIONS.has(action) ? 'read' : 'write');
 
   return enqueueGas(async () => {
+    const started = Date.now();
     let lastError;
     for (let attempt = 1; attempt <= attempts; attempt += 1) {
       let response;
@@ -278,7 +378,11 @@ export async function gasRequest({ action, method = 'GET', body, fetchImpl, env 
       if (!trimmed || trimmed.startsWith('<')) {
         lastError = new SheetError('O Apps Script devolveu HTML. Publique como aplicação web «Qualquer pessoa» com URL /exec.');
         if (attempt < attempts) {
-          await new Promise((r) => setTimeout(r, 500 * attempt));
+          // A read that raced a sync/update got the HTML page. Wait out the
+          // write, then retry, instead of failing the refresh or queueing
+          // every refresh behind the sync from the start.
+          if (laneName === 'read' && (writesInFlight > 0 || writePending > 0)) await writeChain;
+          else await new Promise((r) => setTimeout(r, 500 * attempt));
           continue;
         }
         throw lastError;
@@ -307,11 +411,15 @@ export async function gasRequest({ action, method = 'GET', body, fetchImpl, env 
         throw lastError;
       }
 
+      console.log(
+        `gas action=${action} lane=${laneName} ms=${Date.now() - started} attempts=${attempt} cache=${payload?.gasCache || '-'} sheet=${payload?.sheetRead || '-'} readRows=${payload?.readRows ?? '-'} scannedRows=${payload?.scannedRows ?? '-'}`
+      );
       return payload;
     }
 
+    console.error(`gas action=${action} lane=${laneName} fail ms=${Date.now() - started} attempts=${attempts}`);
     throw lastError || new SheetError(`Folha «${SHEET_TAB}» indisponível`);
-  });
+  }, laneName);
 }
 
 export async function listInboundLeads(options = {}) {
@@ -341,12 +449,22 @@ export async function listInboundLeads(options = {}) {
   }
 
   try {
-    const snapshot = await revalidate(gasOptions);
+    const snapshot = await revalidate(bypassCache ? { ...gasOptions, sheetFresh: true } : gasOptions);
     if (!snapshot || !Array.isArray(snapshot.leads)) {
       throw new SheetError(`Folha «${SHEET_TAB}» indisponível`);
     }
     const cache = bypassCache ? 'refresh' : hadCache ? 'hit' : 'miss';
-    return { leads: snapshot.leads, configured: true, cache };
+    return {
+      leads: snapshot.leads,
+      configured: true,
+      cache,
+      gasMs: snapshot.gasMs ?? null,
+      gasCache: snapshot.gasCache || '',
+      sheetRead: snapshot.sheetRead || '',
+      readMs: snapshot.readMs ?? null,
+      readRows: snapshot.readRows ?? null,
+      scannedRows: snapshot.scannedRows ?? null,
+    };
   } catch (error) {
     if (!bypassCache && hadCache && listCache && Array.isArray(listCache.leads)) {
       return { leads: listCache.leads, configured: true, cache: 'stale' };
@@ -433,4 +551,42 @@ export async function createInboundLead(input, options = {}) {
   const lead = leadFromPayload(payload);
   if (!lead) throw new SheetError('A folha não devolveu a lead criada');
   return lead;
+}
+
+const DEFAULT_WARM_MS = 180_000;
+
+export function sheetWarmerConfig(env = process.env) {
+  const raw = env.LEADS_WARM_MS;
+  const intervalMs = raw === undefined || raw === '' ? DEFAULT_WARM_MS : Number(raw);
+  const enabled = Number.isFinite(intervalMs) && intervalMs >= 60_000;
+  const action = String(env.LEADS_WARM_ACTION || 'ping').trim() || 'ping';
+  return { enabled, intervalMs: enabled ? intervalMs : 0, action };
+}
+
+/** Keep the Apps Script web app from going cold. Does not read the sheet unless LEADS_WARM_ACTION=leads. */
+export function warmAppsScript() {
+  const { configured } = appsScriptConfig();
+  if (!configured) throw new SheetError('Apps Script não configurado', 503);
+  const { action } = sheetWarmerConfig();
+  if (action !== 'ping' && action !== 'leads' && action !== 'health') {
+    throw new SheetError('LEADS_WARM_ACTION inválida', 500);
+  }
+  return gasRequest({ action, method: 'GET', lane: 'warm' });
+}
+
+export function startSheetWarmer() {
+  const config = sheetWarmerConfig();
+  if (!config.enabled || !appsScriptConfig().configured) {
+    return { started: false, intervalMs: 0, action: config.action };
+  }
+  const tick = () => {
+    warmAppsScript().catch((error) => {
+      console.error('gas warm', error?.message || error);
+    });
+  };
+  const first = setTimeout(tick, 10_000);
+  const timer = setInterval(tick, config.intervalMs);
+  if (typeof first.unref === 'function') first.unref();
+  if (typeof timer.unref === 'function') timer.unref();
+  return { started: true, intervalMs: config.intervalMs, action: config.action };
 }

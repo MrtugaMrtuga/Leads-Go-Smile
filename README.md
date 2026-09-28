@@ -16,7 +16,62 @@ A Google Sheet continua a ser a única fonte de verdade. `data/leads.json` não 
 
 `GET /api/leads` guarda a última lista boa em memória durante **45s** (`LEADS_CACHE_TTL_MS`; no Mini, 30–60s) e, em paralelo, em `data/leads-cache.json`. Esse ficheiro só acelera o arranque: não se restaura como base e pode apagar-se. Se a cache está dentro do TTL, a resposta sai logo (`X-Leads-Cache: hit`). Se está velha, a resposta sai logo com esses dados (`stale`) e o Mini pede a folha em fundo. Só sem cache nenhuma (arranque a frio) o pedido espera pelo Apps Script (`miss`). A segunda chamada com a cache quente fica abaixo de 1s. `GET /api/leads?fresh=1` espera pela revalidação que já está a correr e, dentro do TTL, continua a ser um `hit`.
 
-`POST /api/leads/refresh` relê a folha mesmo dentro do TTL e responde com a lista e `X-Leads-Cache: refresh`. Não apaga a cache antes do pedido: se já houver uma leitura da folha a correr, espera por essa (uma ida ao Apps Script, não duas) e depois substitui a memória. `data/leads-cache.json` grava-se depois da resposta. Se a folha falhar, a lista anterior mantém-se. No cabeçalho o controlo é um ícone de setas circulares (`aria-label="Atualizar"`), desactivado e a rodar enquanto o pedido vai; esse estado pinta-se no toque, antes do `await`. A lista no browser (`gosmile-leads-swr-v1`) escreve-se depois do paint. O tempo que resta é o Apps Script: `action=leads` lê a aba inteira com `getDisplayValues` e devolve as linhas cruas e as leads já montadas (o Mini só usa as linhas), mais o arranque a frio do `/exec`. Este repo não encurta esse salto nem muda o corte `2026-09-01`. Etiqueta sugerida: `MacMini-leads-refresh-v2`.
+`POST /api/leads/refresh` relê a folha mesmo dentro do TTL do Mini e responde com a lista e `X-Leads-Cache: refresh`. Não apaga a cache antes do pedido: se já houver uma leitura da folha a correr, espera por essa (uma ida ao Apps Script, não duas) e depois substitui a memória. `data/leads-cache.json` grava-se depois da resposta. Se a folha falhar, a lista anterior mantém-se. No cabeçalho o controlo é um ícone de setas circulares (`aria-label="Atualizar"`), desactivado e a rodar enquanto o pedido vai; esse estado pinta-se no toque, antes do `await`. A lista no browser (`gosmile-leads-swr-v1`) escreve-se depois do paint. O corte mantém-se `2026-09-01`. Etiqueta sugerida: `MacMini-leads-refresh-v3`.
+
+## Latência do Actualizar
+
+No Mini, um `POST /api/leads/refresh` mediu **~79,3s** (HTTP 200, 29 leads). O alvo da clínica, com o `/exec` já quente, é **menos de 2–3s**. Um arranque a frio do Apps Script continua acima disso. Esta alteração não finge o contrário.
+
+O que gastava esse tempo, visto no código (não é uma medição nova contra a folha):
+
+| Hipótese | Veredito |
+| --- | --- |
+| Arranque a frio do `/exec` e o retry do Mini | É o que fecha os ~79s. O Mini aborta aos **55s** (`APPS_SCRIPT_TIMEOUT_MS`) e tenta outra vez. Um primeiro pedido que não responde antes do corte, mais uma leitura que depois acaba, fica à volta de 55s + a leitura (~24s no fumo). |
+| Ler a aba inteira em cada `action=leads` | Era o custo fixo com o script já quente. `getDisplayValues` lia todas as linhas e colunas de «Leads (2024 - 2026)» e só depois deitava fora o que é anterior a 2026-09-01. 29 leads não precisam dessa grelha. Sozinho não explica 79s, mas explica vários segundos em cada Actualizar. |
+| Fila no Mini | A v2 já junta dois refreshes à mesma leitura. A mesma fila punha o refresh **atrás** de `action=sync` (duas abas inteiras, com lock). Isso já não acontece. |
+| Redirect e segredo em cada `/exec` | Cada chamada passa por `script.googleusercontent.com`. É uma ida extra, não dezenas de segundos. |
+| Tamanho do JSON | A resposta já era o conjunto filtrado (29 leads) mais um array `leads` repetido. O `JSON.stringify` disso é milissegundos. Não é o fumo. |
+
+O que mudou no script (é preciso **publicar uma versão nova** do `/exec`; sem isso o Mini muda e a folha não):
+
+- `action=leads` lê **só a coluna do timestamp** com `getDisplayValues` (o mesmo texto que o corte já usava, não um `Date`), fica com as linhas em ou depois de 2026-09-01 e só aí faz `getDisplayValues` desse bloco (`sheetRead: "tail"`). Uma folha por ordem cronológica (linhas acrescentadas ao fundo) lê um bloco curto, não o histórico desde 2024.
+- `CacheService` guarda esse JSON **30s**. `update`, `create` e um sync que inseriu linhas invalidam-no (`bumpLeadsCache_`). O Actualizar manda `fresh=1`: volta a ler a folha. Não responde com a cache do script, nem com a memória do Mini, como se fosse a folha agora.
+- `action=ping` não toca na folha. O Node chama-o a cada **3 minutos** (`LEADS_WARM_MS`; `0` desliga) para o `/exec` não arrefecer. O LaunchAgent [deploy/org.evault.leads.warm.plist](./deploy/org.evault.leads.warm.plist) é opcional e só entra se esse intervalo estiver desligado.
+- A leitura não espera pelo sync. Se o Google devolver HTML porque os dois pedidos se cruzaram, a leitura espera que a escrita acabe e tenta de novo.
+
+Como medir no Mini, depois do pull, do restart do Node e da **nova versão** do Apps Script:
+
+```bash
+# Tem de aparecer X-Leads-Sheet-Read: tail.
+# unknown quer dizer que o /exec ainda é a versão antiga (aba inteira).
+curl -sS -D - -o /tmp/leads.json -X POST http://127.0.0.1:3040/api/leads/refresh
+
+# Quente: repetir com o ping dos 3 min já a correr, ou logo a seguir à primeira.
+# X-Leads-Gas-Cache: miss     o botão relê a folha
+# X-Leads-Sheet-Read: tail
+# X-Leads-Gas-Ms              ida ao Apps Script, pelo relógio do Mini. Alvo < 3000 quente.
+# X-Leads-Read-Ms             só a leitura dentro do script (vem no JSON quando o script é novo)
+# X-Leads-Read-Rows           linhas cujo ecrã foi lido (à volta das 29, não desde 2024)
+# X-Leads-Scanned-Rows        altura da coluna do timestamp
+
+# Frio: LEADS_WARM_MS=0, esperar mais de 10 min sem pedidos, repetir o curl.
+# Esse número pode passar dos 3s. Não é o alvo da clínica.
+
+# Cache do script (não é o botão): um GET, dentro de 30s, sem gravações.
+curl -sS -D - -o /dev/null http://127.0.0.1:3040/api/leads
+```
+
+O log do Node (`/tmp/evault-leads.out.log`) escreve uma linha `gas action=… ms=… cache=… readRows=… scannedRows=…` por chamada.
+
+Tempos esperados — não foram medidos nesta alteração contra a folha viva:
+
+| Estado | O que acontece | Esperado |
+| --- | --- | --- |
+| Quente, Actualizar | `/exec` acordado, `fresh=1`, bloco do corte | à volta de 1–3s |
+| Quente, cache do script | `GET` sem `fresh=1`, menos de 30s, sem update/create/sync com inserções | muitas vezes abaixo de 1s (é a rede) |
+| Frio | primeira chamada depois de vários minutos sem ping | muitas vezes acima de 3s; pode bater nos 55s e no retry |
+
+Se `X-Leads-Read-Rows` for quase igual a `X-Leads-Scanned-Rows`, as linhas do corte não estão juntas no fundo da aba e a leitura volta a ser grande. A folha continua a ser a fonte de verdade.
 
 No browser, a última lista boa fica em `localStorage` (`gosmile-leads-swr-v1`). Ao abrir, a inbox mostra essa lista e «A atualizar…». «Nenhuma lead na inbox.» só aparece depois de uma leitura concluída com zero leads.
 
@@ -85,7 +140,8 @@ O servidor Express serve `dist/` e `/api` na mesma porta. Ver [DEPLOY.md](./DEPL
 | GET | `/api/health` | Estado. `storage` é `apps-script`; `configured` diz se o Mini tem URL e segredo |
 | GET | `/api/leads` | Leads da aba Leads (2024 - 2026) com data de contacto >= 2026-09-01. Cache curta no Mini (memória + `data/leads-cache.json`); `?fresh=1` espera a revalidação |
 | POST | `/api/leads/sync` | Corre `action=sync` no Apps Script (Daniel → EVOB) e apaga a cache da lista. O segredo fica no Mini |
-| POST | `/api/leads/refresh` | Relê a folha (junta-se a uma leitura já em curso) e responde `X-Leads-Cache: refresh` |
+| POST | `/api/leads/refresh` | Relê a folha (`fresh=1` no Apps Script; junta-se a uma leitura já em curso) e responde `X-Leads-Cache: refresh` mais `X-Leads-Gas-Ms` / `X-Leads-Sheet-Read` |
+| POST | `/api/leads/warm` | `action=ping` para o `/exec` não arrefecer. Não lê a lista. O Node também o faz a cada 3 min |
 | POST | `/api/sync/inbound-meta` | Já não importa CSV nem JSON. Devolve a contagem actual da folha |
 | POST | `/api/leads` | Acrescenta uma linha (nome, telefone, email, notas) |
 | GET | `/api/leads/:id` | Lê uma lead (`id` = número da linha) |

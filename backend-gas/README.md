@@ -60,7 +60,11 @@ Reinicie o serviço. `GET /api/health` deve mostrar `"storage":"apps-script","co
 
 `GET /exec?secret=…&action=leads`
 
-Devolve JSON com `leads` (objectos com `id` = número da linha, `nome`, `telefone`, `email`, `dataContacto`, `formFields` das colunas preenchidas com o rótulo em português, e `crm`) e também `headers` + `rows` para o Mini normalizar.
+Devolve JSON com `leads` (objectos com `id` = número da linha, `nome`, `telefone`, `email`, `dataContacto`, `formFields` das colunas preenchidas com o rótulo em português, e `crm`) e também `headers` + `rows` para o Mini normalizar. O Mini só mapeia `headers` + `rows`.
+
+A lista não lê a grelha toda. Lê a coluna do timestamp (`getDisplayValues` numa coluna) e volta a ler o ecrã só nas linhas em ou depois de `2026-09-01` (`sheetRead: "tail"`, `scannedRows`, `readRows`, `readMs`). `CacheService` guarda esse JSON 30 segundos. `fresh=1` ignora a cache e volta a ler a folha — é o que o `POST /api/leads/refresh` pede, para não apresentar dados velhos como novos. `update`, `create` e um `sync` que inseriu linhas chamam `bumpLeadsCache_`.
+
+`GET /exec?secret=…&action=ping` responde sem abrir a folha. Serve para o Mini manter o `/exec` quente.
 
 `POST /exec?secret=…` com JSON:
 
@@ -107,7 +111,7 @@ Depois de colar este `Code.gs`: **Implementar → Gerir implementações → lá
 
 `action=leads` omite linhas anteriores a 2026-09-01. `action=update` grava o id pedido na mesma.
 
-`action=sync` corre `syncDanielToEvob` (Daniel → EVOB, mesmas regras de corte). Não muda `leads`, `update`, `create` nem `health`.
+`action=sync` corre `syncDanielToEvob` (Daniel → EVOB, mesmas regras de corte). Não muda o corte de `leads`, `update`, `create`, `health` nem `ping`. Se inseriu linhas, invalida a cache da lista.
 
 ## 5. Sync Daniel → EVOB
 

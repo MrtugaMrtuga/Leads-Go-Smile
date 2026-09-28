@@ -162,6 +162,9 @@ function runDanielSync_(summary) {
     evob.getRange(start, 1, planned.length, width).setValues(planned);
     SpreadsheetApp.flush();
     summary.inserted = planned.length;
+    try {
+      if (typeof bumpLeadsCache_ === 'function') bumpLeadsCache_();
+    } catch (ignore) {}
   } catch (error) {
     summary.ok = false;
     summary.inserted = 0;

@@ -111,7 +111,22 @@ A base das leads é a Google Sheet (aba Leads (2024 - 2026), só coluna A >= 202
 rsync -a data/settings.json data/reminders.json /Volumes/Backup/evault-leads-data/
 ```
 
-## 8. Actualizar
+## 8. Manter o Apps Script quente
+
+O `/exec` arrefece ao fim de alguns minutos sem chamadas. A primeira chamada a frio pode passar dos 55s (o Mini aborta e tenta outra vez) — foi o formato do fumo de ~79s. Com o processo Node a correr, um ping sai a cada **3 minutos** (`LEADS_WARM_MS`, acção `ping`, sem ler a folha). `LEADS_WARM_MS=0` desliga.
+
+Confirme em `GET /api/health` os campos `leadsWarmMs` (180000) e `leadsWarmAction` (`ping`).
+
+O LaunchAgent [org.evault.leads.warm.plist](./deploy/org.evault.leads.warm.plist) faz o mesmo POST a `/api/leads/warm`. Só o carregue se desligou o intervalo do Node. Os dois ao mesmo tempo só duplicam pings.
+
+```bash
+cp deploy/org.evault.leads.warm.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/org.evault.leads.warm.plist
+```
+
+Depois de colar o `Code.gs` novo é obrigatório **Implementar → Gerir implementações → Nova versão**. Sem isso o Actualizar continua a ler a aba inteira e `X-Leads-Sheet-Read` vem `unknown`. Como medir frio vs quente está no [README](./README.md#latência-do-actualizar).
+
+## 9. Actualizar
 
 ```bash
 git pull
