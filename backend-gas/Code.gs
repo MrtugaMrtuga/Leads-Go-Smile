@@ -2,13 +2,16 @@
  * Leads Go Smile — web app da aba «Leads (2024 - 2026)».
  *
  * Folha ligada ao Apps Script (live /exec): 1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8
- * A folha de Daniel 1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w (Constant Circle)
- * não está ligada a este script. Sync e população da aba ficam fora deste projecto.
- * Só lê e escreve a aba «Leads (2024 - 2026)».
+ * A folha de Daniel 1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w (Constant Circle,
+ * título «Leads - Go Smile») não está ligada a este script. O sync lê-a com
+ * SpreadsheetApp.openById em SyncDaniel.gs (syncDanielToEvob). Não há projecto
+ * Cloud nem conta de serviço. A web app continua a ler e escrever só a aba
+ * «Leads (2024 - 2026)» da EVOB.
  *
  * A lista (action=leads) inclui só linhas cuja coluna A (cabeçalho literal «4»,
  * timestamp ISO) é >= 2026-09-01 (dia de calendário Europe/Lisbon).
  * Data Contacto é texto de CRM e não decide a lista. update/create não aplicam este corte.
+ * action=sync corre syncDanielToEvob e não muda action=leads|update|create|health.
  *
  * Segredo: propriedade do script APPS_SCRIPT_SECRET, igual à env do Mini.
  * O mapeamento de colunas espelha shared/inboundMeta.js.
@@ -684,6 +687,7 @@ function handle_(e) {
     }
     if (action === 'update' || action === 'updateLead') return jsonResponse_(updateLead_(body));
     if (action === 'create' || action === 'createLead') return jsonResponse_(createLead_(body));
+    if (action === 'sync') return jsonResponse_(syncDanielToEvob());
     return jsonResponse_({ ok: false, error: 'Ação inválida.' });
   } catch (error) {
     return jsonResponse_({ ok: false, error: error.message || String(error) });

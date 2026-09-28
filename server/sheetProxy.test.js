@@ -358,13 +358,121 @@ test('apps script is bound to Leads (2024 - 2026) and the client bundle has no s
   assert.doesNotMatch(gas, /var SHEET_TAB = 'Inbound META'/);
   assert.doesNotMatch(gas, /1LMcABX/);
   assert.doesNotMatch(gas, /getSheets\(\)\[0\]/);
-  assert.doesNotMatch(gas, /SyncDaniel/);
-  assert.equal(existsSync(new URL('../backend-gas/SyncDaniel.gs', import.meta.url)), false);
-  assert.equal(syncDoc.split('\n').length, 1);
-  assert.match(syncDoc, /fora deste PR/);
+  assert.match(gas, /action === 'sync'/);
+  assert.match(gas, /syncDanielToEvob\(\)/);
+  const syncGas = readFileSync(new URL('../backend-gas/SyncDaniel.gs', import.meta.url), 'utf8');
+  assert.match(syncGas, /function syncDanielToEvob\(/);
+  assert.match(syncGas, /function installDanielSyncTrigger\(/);
+  assert.match(syncGas, /everyMinutes\(15\)/);
+  assert.match(syncGas, /1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w/);
+  assert.match(syncGas, /var DANIEL_SHEET_TAB = 'Leads \(2024 - 2026\)'/);
+  assert.match(syncGas, /var DANIEL_SHEET_TAB_FALLBACK = 'Leads - Go Smile'/);
+  assert.match(syncGas, /passesContactCutoff_/);
+  assert.match(syncGas, /CONTACT_CUTOFF_DAY/);
+  assert.match(syncGas, /\(phone \|\| mail \|\| name\) \+ '\|' \+ name \+ '\|' \+ day/);
+  assert.match(syncGas, /getLastRow\(\) \+ 1/);
+  assert.doesNotMatch(syncGas, /Inbound META/);
+  assert.doesNotMatch(syncGas, /service_account|private_key|cloud-platform/);
+  assert.doesNotMatch(syncGas, /clearContent\(|deleteRow\(|\.clear\(/);
+  assert.match(syncDoc, /syncDanielToEvob/);
+  assert.match(syncDoc, /2026-09-01/);
+  assert.match(syncDoc, /29/);
+  assert.doesNotMatch(syncDoc, /fora deste PR/);
   assert.match(client, /PIN = '2000'/);
   assert.doesNotMatch(client, /APPS_SCRIPT_SECRET\s*=/);
   assert.doesNotMatch(client, /script\.google\.com/);
+});
+
+test('POST /api/leads/sync runs action=sync and drops the list cache', async () => {
+  await clearLeadsListCache();
+  process.env.LEADS_CACHE_TTL_MS = '45000';
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  let listCalls = 0;
+  let posted = null;
+  const app = createApp();
+
+  await withFetch(async (url, init) => {
+    const method = String(init?.method || 'GET').toUpperCase();
+    if (method === 'POST') {
+      posted = JSON.parse(init.body);
+      assert.match(String(url), /action=sync/);
+      assert.equal(String(url).includes(SECRET), true);
+      return new Response(JSON.stringify({
+        ok: true,
+        scanned: 29,
+        inserted: 21,
+        skipped: 8,
+        errors: 0,
+        cutoff: '2026-09-01',
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    listCalls += 1;
+    return new Response(JSON.stringify(sheetPayload()), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }, async () => {
+    const cold = await call(app, 'GET', '/api/leads');
+    assert.equal(cold.headers['x-leads-cache'], 'miss');
+    assert.equal(listCalls, 1);
+    const sync = await call(app, 'POST', '/api/leads/sync');
+    assert.equal(sync.status, 200);
+    assert.equal(sync.json.scanned, 29);
+    assert.equal(sync.json.inserted, 21);
+    assert.equal(sync.json.skipped, 8);
+    assert.equal(sync.json.errors, 0);
+    assert.equal(sync.json.cacheCleared, true);
+    assert.equal(sync.text.includes(SECRET), false);
+    assert.equal(posted.action, 'sync');
+    const again = await call(app, 'GET', '/api/leads');
+    assert.equal(again.headers['x-leads-cache'], 'miss');
+    assert.equal(listCalls, 2);
+  });
+});
+
+test('a failed Daniel sync keeps the warm list cache', async () => {
+  await clearLeadsListCache();
+  process.env.LEADS_CACHE_TTL_MS = '45000';
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  let listCalls = 0;
+  const app = createApp();
+
+  await withFetch(async (_url, init) => {
+    const method = String(init?.method || 'GET').toUpperCase();
+    if (method === 'POST') {
+      return new Response(JSON.stringify({ ok: false, error: 'Sync Daniel falhou' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    listCalls += 1;
+    return new Response(JSON.stringify(sheetPayload()), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }, async () => {
+    const cold = await call(app, 'GET', '/api/leads');
+    assert.equal(cold.headers['x-leads-cache'], 'miss');
+    const sync = await call(app, 'POST', '/api/leads/sync');
+    assert.equal(sync.status, 502);
+    assert.match(sync.json.error, /Daniel/);
+    const warm = await call(app, 'GET', '/api/leads');
+    assert.equal(warm.headers['x-leads-cache'], 'hit');
+    assert.equal(listCalls, 1);
+  });
+});
+
+test('POST /api/leads/sync without Apps Script is 503', async () => {
+  process.env.APPS_SCRIPT_URL = '';
+  process.env.APPS_SCRIPT_SECRET = '';
+  const app = createApp();
+  const response = await call(app, 'POST', '/api/leads/sync');
+  assert.equal(response.status, 503);
 });
 
 test('the close chart is in the client source that the production bundle builds', () => {

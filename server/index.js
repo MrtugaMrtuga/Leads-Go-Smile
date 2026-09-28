@@ -10,6 +10,7 @@ import {
   listInboundLeads,
   rememberInboundLead,
   SheetError,
+  syncDanielLeads,
   updateInboundLead,
 } from './sheetClient.js';
 import { addReminder, getSettings, listReminders, retireLeadsJson, saveSettings } from './store.js';
@@ -154,6 +155,15 @@ export function createApiRouter() {
       res.set('Cache-Control', 'no-store');
       res.set('X-Leads-Cache', result.cache);
       res.json(result.leads);
+    } catch (error) {
+      sendSheetError(res, error);
+    }
+  });
+
+  api.post('/leads/sync', async (_req, res) => {
+    try {
+      const summary = await syncDanielLeads();
+      res.json({ ...summary, cacheCleared: true });
     } catch (error) {
       sendSheetError(res, error);
     }

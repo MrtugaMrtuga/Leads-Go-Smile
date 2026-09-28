@@ -1,13 +1,13 @@
 # Apps Script — Leads (2024 - 2026)
 
-Web app grátis, ligada à folha **Leads - Go Smile**. Não há projecto Google Cloud, conta de serviço nem billing.
+Web app grátis, ligada à folha EVOB. Não há projecto Google Cloud, conta de serviço nem billing.
 
 - Folha ligada ao Apps Script (live `/exec`): `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8`
-- Folha de Daniel (Constant Circle), não ligada a este script: `1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`
-- Aba única: **Leads (2024 - 2026)** (nome exacto, com espaços)
+- Folha de Daniel (Constant Circle), título **Leads - Go Smile**, não ligada a este script: `1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`. A aba das leads é **Leads (2024 - 2026)** (o título do ficheiro não é o nome da aba)
+- Aba da web app: **Leads (2024 - 2026)** (nome exacto, com espaços)
 - A aba «Inbound META» não é lida nem escrita
-- Lista da app: data de contacto **>= 2026-09-01** (Europe/Lisbon)
-- Sync e população da aba ficam fora deste PR ([SYNC-DANIEL-EVOB.md](../SYNC-DANIEL-EVOB.md)). Etiqueta sugerida: `MacMini-leads-tab-2024-v1`
+- Lista da app: coluna A **>= 2026-09-01** (Europe/Lisbon)
+- Sync Daniel → EVOB: [`SyncDaniel.gs`](./SyncDaniel.gs) no mesmo projecto. Passos em [SYNC-DANIEL-EVOB.md](../SYNC-DANIEL-EVOB.md). Etiqueta sugerida: `MacMini-daniel-sync-v1`
 
 O `/exec` em produção já está ligado à folha de cima. Este ficheiro regista esse ID. Não crie outra implementação por cima do URL live só para alinhar o repositório.
 
@@ -15,9 +15,9 @@ O Mini (Node, porta 3040) chama este `/exec` com o segredo. O browser nunca rece
 
 ## 1. Ligar o script à folha
 
-1. A folha ligada é `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8` (conta que a edita, de preferência brunoairesaugusto@gmail.com). A de daniel@constantcircle.co (`1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`) não é a folha deste script. Criar e encher a aba **Leads (2024 - 2026)** fica fora deste PR.
+1. A folha ligada é `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8` (conta que a edita, de preferência brunoairesaugusto@gmail.com). A de daniel@constantcircle.co (`1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`, título «Leads - Go Smile») não é a folha deste script. O sync abre-a por ID; a conta tem de a poder editar.
 2. **Extensões → Apps Script**.
-3. Apague o `Code.gs` de exemplo e cole [`Code.gs`](./Code.gs).
+3. Apague o `Code.gs` de exemplo e cole [`Code.gs`](./Code.gs). Crie outro ficheiro e cole [`SyncDaniel.gs`](./SyncDaniel.gs). Os dois ficam no mesmo projecto.
 4. Em **Definições do projecto → Mostrar ficheiro de manifesto**, confirme o [`appsscript.json`](./appsscript.json) (fuso `Europe/Lisbon`, runtime V8).
 5. Guarde.
 
@@ -106,3 +106,9 @@ Depois de colar este `Code.gs`: **Implementar → Gerir implementações → lá
 `action=create` acrescenta uma linha com o timestamp na coluna A (cabeçalho `4`), Nome, Telefone, Email e Comentários.
 
 `action=leads` omite linhas anteriores a 2026-09-01. `action=update` grava o id pedido na mesma.
+
+`action=sync` corre `syncDanielToEvob` (Daniel → EVOB, mesmas regras de corte). Não muda `leads`, `update`, `create` nem `health`.
+
+## 5. Sync Daniel → EVOB
+
+Cole também [`SyncDaniel.gs`](./SyncDaniel.gs) no mesmo projecto. No editor, corra `syncDanielToEvob` uma vez e crie um gatilho de 15 ou 30 minutos (ou corra `installDanielSyncTrigger`). Publique uma **nova versão** para o `/exec` aceitar `action=sync`. O corte mantém-se `2026-09-01`. Mapa de colunas, autorização e a verificação (Daniel 29, EVOB 8 em 28 Set 2026) estão em [SYNC-DANIEL-EVOB.md](../SYNC-DANIEL-EVOB.md).
