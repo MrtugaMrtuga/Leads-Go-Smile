@@ -642,7 +642,7 @@ test('fresh=1 and POST /api/leads/refresh bypass a warm TTL and reread the sheet
   assert.equal(saved?.leads?.[0]?.name, 'Lead Depois do Refresh');
 });
 
-test('the header refresh replaces the browser cache and keeps the contact cutoff', () => {
+test('the header refresh is an icon, one sheet read, and keeps the contact cutoff', () => {
   const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
   const layout = readFileSync(new URL('../components/Layout.tsx', import.meta.url), 'utf8');
   const api = readFileSync(new URL('../api.ts', import.meta.url), 'utf8');
@@ -651,27 +651,197 @@ test('the header refresh replaces the browser cache and keeps the contact cutoff
   const client = readFileSync(new URL('./sheetClient.js', import.meta.url), 'utf8');
   const meta = readFileSync(new URL('../shared/inboundMeta.js', import.meta.url), 'utf8');
   const gas = readFileSync(new URL('../backend-gas/Code.gs', import.meta.url), 'utf8');
+  const syncGas = readFileSync(new URL('../backend-gas/SyncDaniel.gs', import.meta.url), 'utf8');
   const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
   const vite = readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8');
-  assert.match(layout, /aria-label="Atualizar leads"/);
-  assert.match(layout, /A atualizar…/);
-  assert.match(layout, /'Atualizar'/);
+  const css = readFileSync(new URL('../index.css', import.meta.url), 'utf8');
+  const look = readFileSync(new URL('../public/look.css', import.meta.url), 'utf8');
+  const refreshFn = app.slice(app.indexOf('const refreshFromSheet'), app.indexOf('const handleLeadAction'));
+  const listFn = client.slice(client.indexOf('export async function listInboundLeads'), client.indexOf('export async function getInboundLead'));
+  assert.match(layout, /aria-label="Atualizar"/);
+  assert.doesNotMatch(layout, /Atualizar leads/);
+  assert.doesNotMatch(layout, /A atualizar/);
+  assert.doesNotMatch(layout, />\s*Atualizar\s*</);
+  assert.match(layout, /aria-busy=\{isRefreshing/);
+  assert.match(layout, /disabled=\{isRefreshing\}/);
+  assert.match(layout, /className="refresh-icon"/);
   assert.match(layout, /logo_Gosmilesimple\.png/);
-  assert.match(app, /refreshLeads\(/);
-  assert.match(app, /clearCachedLeads\(\)/);
+  assert.match(css, /\.refresh-icon/);
+  assert.match(css, /stroke:\s*currentColor/);
+  assert.match(css, /refresh-spin/);
+  assert.match(look, /\.refresh-icon/);
+  assert.match(look, /refresh-spin/);
+  assert.match(refreshFn, /flushSync/);
+  assert.match(refreshFn, /refreshLeads\(/);
+  assert.match(refreshFn, /deferPersist:\s*true/);
+  assert.doesNotMatch(refreshFn, /fetchLeads/);
+  assert.doesNotMatch(refreshFn, /clearCachedLeads/);
   assert.match(app, /onRefresh=\{refreshFromSheet\}/);
+  assert.match(app, /isRefreshing=\{isRefreshing\}/);
+  assert.doesNotMatch(app, /isRefreshing \|\| isLoading/);
   assert.match(api, /\/api\/leads\/refresh/);
-  assert.match(cache, /removeItem\(KEY\)/);
   assert.match(cache, /gosmile-leads-swr-v1/);
   assert.match(server, /\/leads\/refresh/);
   assert.match(server, /bypassCache: true/);
+  assert.match(server, /\/leads\/sync/);
+  assert.match(listFn, /bypassCache/);
+  assert.doesNotMatch(listFn, /clearLeadsListCache/);
   assert.match(client, /clearLeadsListCache/);
   assert.match(meta, /export const CONTACT_CUTOFF_DAY = '2026-09-01'/);
   assert.match(gas, /var CONTACT_CUTOFF_DAY = '2026-09-01'/);
-  assert.match(readme, /MacMini-leads-refresh-v1/);
+  assert.match(syncGas, /syncDanielToEvob|function sync/);
+  assert.match(readme, /MacMini-leads-refresh-v2/);
   assert.match(readme, /2026-09-01/);
   assert.match(vite, /bypass\(req\)/);
   assert.match(vite, /\[a-z0-9\]/);
+});
+
+test('POST /api/leads/refresh joins an in-flight sheet read instead of starting a second one', async () => {
+  await clearLeadsListCache();
+  process.env.LEADS_CACHE_TTL_MS = '45000';
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  let calls = 0;
+  let releaseGate = () => {};
+  const gate = new Promise((resolve) => {
+    releaseGate = resolve;
+  });
+  let markStarted = () => {};
+  const started = new Promise((resolve) => {
+    markStarted = resolve;
+  });
+  const app = createApp();
+
+  await withFetch(async () => {
+    calls += 1;
+    if (calls === 1) {
+      return new Response(JSON.stringify(sheetPayload()), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    markStarted();
+    await gate;
+    const values = [...IDA_VALUES];
+    values[2] = 'Lead Depois do Refresh';
+    return new Response(JSON.stringify(sheetPayload(values)), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }, async () => {
+    const cold = await call(app, 'GET', '/api/leads');
+    assert.equal(cold.headers['x-leads-cache'], 'miss');
+    assert.equal(calls, 1);
+
+    process.env.LEADS_CACHE_TTL_MS = '1';
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    const stale = await call(app, 'GET', '/api/leads');
+    assert.equal(stale.headers['x-leads-cache'], 'stale');
+    assert.equal(stale.json[0].name, cold.json[0].name);
+    await Promise.race([
+      started,
+      new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('in-flight sheet read did not start')), 2000);
+      }),
+    ]);
+
+    const startedAt = Date.now();
+    const refreshPromise = call(app, 'POST', '/api/leads/refresh');
+    await new Promise((resolve) => setTimeout(resolve, 40));
+    assert.equal(calls, 2, 'refresh must not open a second Apps Script read');
+    releaseGate();
+    const refreshed = await refreshPromise;
+    const elapsed = Date.now() - startedAt;
+    assert.equal(refreshed.status, 200);
+    assert.equal(refreshed.headers['x-leads-cache'], 'refresh');
+    assert.equal(refreshed.json[0].name, 'Lead Depois do Refresh');
+    assert.equal(calls, 2);
+    assert.ok(elapsed < 500, `joined refresh took ${elapsed}ms; a second sheet read would wait again`);
+
+    process.env.LEADS_CACHE_TTL_MS = '45000';
+    const after = await call(app, 'GET', '/api/leads');
+    assert.equal(after.headers['x-leads-cache'], 'hit');
+    assert.equal(after.json[0].name, 'Lead Depois do Refresh');
+    assert.equal(calls, 2);
+  });
+});
+
+test('a failed refresh keeps the warm list and does not delete the cache file', async () => {
+  await clearLeadsListCache();
+  process.env.LEADS_CACHE_TTL_MS = '45000';
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  let calls = 0;
+  const app = createApp();
+
+  await withFetch(async () => {
+    calls += 1;
+    if (calls > 1) {
+      return new Response(JSON.stringify({ ok: false, error: 'Folha em baixo' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }
+    return new Response(JSON.stringify(sheetPayload()), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }, async () => {
+    const cold = await call(app, 'GET', '/api/leads');
+    assert.equal(cold.headers['x-leads-cache'], 'miss');
+    const refreshed = await call(app, 'POST', '/api/leads/refresh');
+    assert.equal(refreshed.status, 502);
+    const warm = await call(app, 'GET', '/api/leads');
+    assert.equal(warm.headers['x-leads-cache'], 'hit');
+    assert.equal(warm.json[0].name, cold.json[0].name);
+    // One cold read, then the default two retries of a 502. The list stays cached.
+    assert.equal(calls, 4);
+  });
+
+  let saved = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      saved = JSON.parse(await readFile(join(dataDir, 'leads-cache.json'), 'utf8'));
+      if (saved?.leads?.[0]?.name) break;
+    } catch {
+      /* persist is queued after the cold response */
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.equal(saved?.leads?.[0]?.name, 'Ida Cristina Albuquerque Malho Rodrigues de Oliveira');
+});
+
+test('POST /api/leads/refresh waits for one sheet read, not a wiped cache plus another', async () => {
+  await clearLeadsListCache();
+  process.env.LEADS_CACHE_TTL_MS = '45000';
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  const sheetMs = 200;
+  let calls = 0;
+  const app = createApp();
+
+  await withFetch(async () => {
+    calls += 1;
+    await new Promise((resolve) => setTimeout(resolve, sheetMs));
+    const values = [...IDA_VALUES];
+    if (calls > 1) values[2] = 'Lead Depois do Refresh';
+    return new Response(JSON.stringify(sheetPayload(values)), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }, async () => {
+    const cold = await call(app, 'GET', '/api/leads');
+    assert.equal(cold.headers['x-leads-cache'], 'miss');
+    const startedAt = Date.now();
+    const refreshed = await call(app, 'POST', '/api/leads/refresh');
+    const elapsed = Date.now() - startedAt;
+    assert.equal(refreshed.status, 200);
+    assert.equal(refreshed.headers['x-leads-cache'], 'refresh');
+    assert.equal(refreshed.json[0].name, 'Lead Depois do Refresh');
+    assert.equal(calls, 2);
+    assert.ok(elapsed >= sheetMs - 30, `refresh returned in ${elapsed}ms before the sheet`);
+    assert.ok(elapsed < sheetMs + 500, `refresh took ${elapsed}ms for one ${sheetMs}ms sheet read`);
+  });
 });
 
 test('leads-cache.json is served on a cold process and leads.json is not the list', async () => {

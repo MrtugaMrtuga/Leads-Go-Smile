@@ -1,4 +1,4 @@
-const CACHE = 'gosmile-leads-menu-v2';
+const CACHE = 'gosmile-leads-refresh-v2';
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
