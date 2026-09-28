@@ -12,6 +12,11 @@ export default defineConfig({
       '/api': {
         target: 'http://127.0.0.1:3040',
         changeOrigin: true,
+        // The client module is /api.ts. Do not send that file to Express.
+        bypass(req) {
+          const path = String(req.url || '').split('?')[0];
+          if (/\.[a-z0-9]+$/i.test(path)) return path;
+        },
       },
     },
   },

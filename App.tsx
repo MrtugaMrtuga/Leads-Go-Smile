@@ -8,8 +8,8 @@ import Accounts from './views/Accounts';
 import Admin from './views/Admin';
 import { AppView, Lead, AdminSettings, LeadUpdatePayload } from './types';
 import { formatMonthYear, getLeadsByMonth, mapDataToLeads, sortLeadsNewestFirst } from './utils';
-import { createLead, fetchHealth, fetchLeads, fetchSettings, saveSettings, sendReminder, updateLead } from './api';
-import { readCachedLeads, writeCachedLeads } from './leadCache';
+import { createLead, fetchHealth, fetchLeads, fetchSettings, refreshLeads, saveSettings, sendReminder, updateLead } from './api';
+import { clearCachedLeads, readCachedLeads, writeCachedLeads } from './leadCache';
 
 function leadsFromCache(): Lead[] {
   const cached = readCachedLeads();
@@ -22,6 +22,7 @@ const App: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [listSettled, setListSettled] = useState(() => readCachedLeads() !== null);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [settings, setSettings] = useState<AdminSettings>({ commissionPercent: 3 });
@@ -61,6 +62,26 @@ const App: React.FC = () => {
   useEffect(() => {
     loadLeads();
   }, [loadLeads]);
+
+  const refreshFromSheet = useCallback(async () => {
+    setIsRefreshing(true);
+    setFetchError(null);
+    try {
+      const next = await refreshLeads();
+      if (next.cache === 'unconfigured') {
+        setFetchError('Defina APPS_SCRIPT_URL e APPS_SCRIPT_SECRET no Mini');
+        return;
+      }
+      clearCachedLeads();
+      applyLeads(next.leads);
+    } catch (error) {
+      console.error(error);
+      setFetchError(error instanceof Error ? error.message : 'API local indisponível');
+      setTimeout(() => setFetchError(null), 3000);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [applyLeads]);
 
   const handleLeadAction = async (id: string, updates: Partial<Lead>, extraData?: Partial<LeadUpdatePayload>) => {
     const motivo = extraData?.motivo ?? updates.discardReason;
@@ -262,6 +283,8 @@ const App: React.FC = () => {
       onNextMonth={() => changeMonth(1)}
       onSync={loadLeads}
       isSyncing={isLoading || isSyncing}
+      onRefresh={refreshFromSheet}
+      isRefreshing={isRefreshing || isLoading}
     >
       {(fetchError || isSyncing) && (
         <div className="toast">{isSyncing ? 'A processar…' : fetchError}</div>

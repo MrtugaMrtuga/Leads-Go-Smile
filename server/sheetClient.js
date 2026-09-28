@@ -104,10 +104,12 @@ function isFresh(cache) {
 async function hydrateFromDisk() {
   if (listCache) return;
   if (!hydrateFlight) {
+    const seen = revision;
     hydrateFlight = (async () => {
       try {
         const raw = JSON.parse(await readFile(cacheFile(), 'utf8'));
         const at = Number(raw?.at);
+        if (seen !== revision) return;
         if (!listCache && raw && Array.isArray(raw.leads) && Number.isFinite(at)) {
           listCache = { at, leads: raw.leads };
         }
@@ -160,7 +162,7 @@ function revalidate(gasOptions) {
       if (seen !== revision) return listCache;
       return commitCache(leads);
     } finally {
-      revalidateFlight = null;
+      if (revalidateFlight === task) revalidateFlight = null;
     }
   })();
 
@@ -317,6 +319,8 @@ export async function listInboundLeads(options = {}) {
   if (!cfg.configured) return { leads: [], configured: false, cache: 'unconfigured' };
 
   const { fresh = false, bypassCache = false, ...gasOptions } = options;
+  if (bypassCache) await clearLeadsListCache();
+
   await hydrateFromDisk();
   const hadCache = Boolean(listCache && Array.isArray(listCache.leads));
 
@@ -336,9 +340,10 @@ export async function listInboundLeads(options = {}) {
     if (!snapshot || !Array.isArray(snapshot.leads)) {
       throw new SheetError(`Folha «${SHEET_TAB}» indisponível`);
     }
-    return { leads: snapshot.leads, configured: true, cache: hadCache ? 'hit' : 'miss' };
+    const cache = bypassCache ? 'refresh' : hadCache ? 'hit' : 'miss';
+    return { leads: snapshot.leads, configured: true, cache };
   } catch (error) {
-    if (hadCache && listCache && Array.isArray(listCache.leads)) {
+    if (!bypassCache && hadCache && listCache && Array.isArray(listCache.leads)) {
       return { leads: listCache.leads, configured: true, cache: 'stale' };
     }
     throw error;

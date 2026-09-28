@@ -175,6 +175,12 @@ button {
   color: #000;
 }
 
+.header-tools {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .header-right {
   display: flex;
   align-items: center;
@@ -182,6 +188,18 @@ button {
   background: none;
   border: 0;
   padding: 0;
+}
+
+.refresh-btn {
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.01em;
+  padding: 8px 0;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .gear-btn {

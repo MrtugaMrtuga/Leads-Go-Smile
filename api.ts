@@ -1,6 +1,6 @@
 import { AdminSettings, Lead } from './types';
 
-export type LeadsCacheHeader = 'hit' | 'stale' | 'miss' | 'unconfigured';
+export type LeadsCacheHeader = 'hit' | 'stale' | 'miss' | 'refresh' | 'unconfigured';
 
 export interface InboundMetaSyncResult {
   ok: boolean;
@@ -30,10 +30,27 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
-export async function fetchLeads(options?: { fresh?: boolean }): Promise<{ leads: Lead[]; cache: LeadsCacheHeader }> {
-  const path = options?.fresh ? '/api/leads?fresh=1' : '/api/leads';
+function cacheHeader(response: Response): LeadsCacheHeader {
+  const header = response.headers.get('X-Leads-Cache') || '';
+  if (
+    header === 'hit' ||
+    header === 'stale' ||
+    header === 'miss' ||
+    header === 'refresh' ||
+    header === 'unconfigured'
+  ) {
+    return header;
+  }
+  return 'miss';
+}
+
+async function readLeadsResponse(
+  path: string,
+  init?: RequestInit
+): Promise<{ leads: Lead[]; cache: LeadsCacheHeader }> {
   const response = await fetch(path, {
-    headers: { Accept: 'application/json' },
+    ...init,
+    headers: { Accept: 'application/json', ...init?.headers },
     cache: 'no-store',
   });
   const data = await response.json().catch(() => ({}));
@@ -41,10 +58,16 @@ export async function fetchLeads(options?: { fresh?: boolean }): Promise<{ leads
     const message = data && typeof data === 'object' && 'error' in data ? String(data.error) : '';
     throw new Error(message || `Erro ${response.status} em ${path}`);
   }
-  const header = response.headers.get('X-Leads-Cache') || '';
-  const cache: LeadsCacheHeader =
-    header === 'hit' || header === 'stale' || header === 'miss' || header === 'unconfigured' ? header : 'miss';
-  return { leads: data as Lead[], cache };
+  return { leads: data as Lead[], cache: cacheHeader(response) };
+}
+
+export function fetchLeads(options?: { fresh?: boolean }) {
+  const path = options?.fresh ? '/api/leads?fresh=1' : '/api/leads';
+  return readLeadsResponse(path);
+}
+
+export function refreshLeads() {
+  return readLeadsResponse('/api/leads/refresh', { method: 'POST' });
 }
 
 export function syncInboundMeta() {
