@@ -1,6 +1,6 @@
 # Deploy no Mac Mini — GoSmile Leads
 
-Alvo: **https://leads.evob.org** na porta **3040**, PWA instalável. As leads vivem na aba **Leads (2024 - 2026)** (Apps Script). Comissão e lembretes continuam em disco. Sync e população dessa aba ficam fora deste repositório.
+Alvo: **https://leads.evob.org** na porta **3040**, PWA instalável. As leads vivem na aba **Leads (2024 - 2026)** (Apps Script). Comissão e lembretes continuam em disco. O sync Daniel → EVOB está em [SYNC-DANIEL-EVOB.md](./SYNC-DANIEL-EVOB.md).
 
 ## 1. Requisitos
 
@@ -105,7 +105,7 @@ No Safari ou Chrome, abra https://leads.evob.org, introduza o PIN **2000**, depo
 
 ## 7. Cópias de segurança
 
-A base das leads é a Google Sheet (aba Leads (2024 - 2026), só coluna A >= 2026-09-01). `data/leads.json` é esvaziado no arranque e não deve ser restaurado como fonte. `data/leads-cache.json` é uma cópia opcional para o Mini responder depressa; também não é fonte de verdade. Faça backup de `data/settings.json` e `data/reminders.json` se quiser guardar comissão e lembretes. Sync e população da aba ficam fora deste PR.
+A base das leads é a Google Sheet (aba Leads (2024 - 2026), só coluna A >= 2026-09-01). `data/leads.json` é esvaziado no arranque e não deve ser restaurado como fonte. `data/leads-cache.json` é uma cópia opcional para o Mini responder depressa; também não é fonte de verdade. Faça backup de `data/settings.json` e `data/reminders.json` se quiser guardar comissão e lembretes. O sync que enche a aba a partir da folha de Daniel está em [SYNC-DANIEL-EVOB.md](./SYNC-DANIEL-EVOB.md).
 
 ```bash
 rsync -a data/settings.json data/reminders.json /Volumes/Backup/evault-leads-data/

@@ -385,6 +385,24 @@ export async function updateInboundLead(id, updates, options = {}) {
   return lead;
 }
 
+export async function syncDanielLeads(options = {}) {
+  const summary = await gasRequest({
+    action: 'sync',
+    method: 'POST',
+    body: {},
+    ...options,
+  });
+  await clearLeadsListCache();
+  const counts = {
+    scanned: summary?.scanned,
+    inserted: summary?.inserted,
+    skipped: summary?.skipped,
+    errors: summary?.errors,
+  };
+  console.log('daniel sync', JSON.stringify(counts));
+  return summary;
+}
+
 export async function createInboundLead(input, options = {}) {
   const cfg = appsScriptConfig(options.env);
   if (!cfg.configured) throw new SheetError('Apps Script não configurado', 503);

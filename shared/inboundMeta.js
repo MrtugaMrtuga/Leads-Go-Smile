@@ -5,7 +5,8 @@
  *
  * SHEET_ID is the sheet bound to the live Apps Script /exec.
  * Daniel's sheet 1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w (Constant Circle)
- * is not this ID. Tab setup and sync live outside this project.
+ * is not this ID. The file title is «Leads - Go Smile»; the leads tab is DANIEL_SHEET_TAB.
+ * Sync lives in backend-gas/SyncDaniel.gs and shared/danielSync.js (see SYNC-DANIEL-EVOB.md).
  * Nothing in the Node server reads SHEET_ID.
  *
  * App lists include a row only when column A (the ISO timestamp) is on or after
@@ -17,6 +18,10 @@
 export const SHEET_ID = '1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8';
 export const DANIEL_SHEET_ID = '1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w';
 export const SHEET_TAB = 'Leads (2024 - 2026)';
+/** Verified tab on Daniel's file (title «Leads - Go Smile»). Not the Inbound META tab. */
+export const DANIEL_SHEET_TAB = 'Leads (2024 - 2026)';
+/** Spreadsheet title MacMiner used. Tried only when DANIEL_SHEET_TAB is absent. */
+export const DANIEL_SHEET_TAB_FALLBACK = 'Leads - Go Smile';
 
 /** Inclusive Lisbon calendar day. Rows before this do not appear in GET /api/leads. */
 export const CONTACT_CUTOFF_DAY = '2026-09-01';
@@ -621,6 +626,25 @@ function claimTimestampColumn(indexed, cells, raw, used) {
   if (!column) return;
   raw.timestamp_col = String(cells[column.index] ?? '').trim();
   if (used) used.add(column.index);
+}
+
+export function headerIndexForDef(headers, def) {
+  if (!def) return -1;
+  const column = findColumn(indexHeaders(Array.isArray(headers) ? headers : []), def);
+  return column ? column.index : -1;
+}
+
+/** Raw COLUMN_DEFS cells, including the column A timestamp. Does not drop status markers. */
+export function rawFieldsFromSheetRow(headers, values) {
+  const indexed = indexHeaders(Array.isArray(headers) ? headers : []);
+  const cells = Array.isArray(values) ? values : [];
+  const raw = {};
+  COLUMN_DEFS.forEach((def) => {
+    const column = findColumn(indexed, def);
+    raw[def.key] = column ? String(cells[column.index] ?? '').trim() : '';
+  });
+  claimTimestampColumn(indexed, cells, raw);
+  return raw;
 }
 
 function parseMoney(value) {
