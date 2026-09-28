@@ -371,12 +371,15 @@ test('apps script is bound to Leads (2024 - 2026) and the client bundle has no s
   assert.match(syncGas, /CONTACT_CUTOFF_DAY/);
   assert.match(syncGas, /\(phone \|\| mail \|\| name\) \+ '\|' \+ name \+ '\|' \+ day/);
   assert.match(syncGas, /getLastRow\(\) \+ 1/);
-  assert.doesNotMatch(syncGas, /Inbound META/);
+  assert.match(syncGas, /1aAKXH7TnV17uCemEol56X_0NNs6ZVAF3LrBpZHf9ZoaRlw8rn26t1_mo/);
+  assert.doesNotMatch(syncGas, /getSheetByName\('Inbound META'\)/);
   assert.doesNotMatch(syncGas, /service_account|private_key|cloud-platform/);
   assert.doesNotMatch(syncGas, /clearContent\(|deleteRow\(|\.clear\(/);
   assert.match(syncDoc, /syncDanielToEvob/);
   assert.match(syncDoc, /2026-09-01/);
   assert.match(syncDoc, /29/);
+  assert.match(syncDoc, /Leads Inbound META evob/);
+  assert.match(syncDoc, /1aAKXH7TnV17uCemEol56X_0NNs6ZVAF3LrBpZHf9ZoaRlw8rn26t1_mo/);
   assert.doesNotMatch(syncDoc, /fora deste PR/);
   assert.match(client, /PIN = '2000'/);
   assert.doesNotMatch(client, /APPS_SCRIPT_SECRET\s*=/);

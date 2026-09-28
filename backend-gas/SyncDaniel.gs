@@ -1,5 +1,7 @@
 /**
- * Sync Daniel → EVOB. Cole este ficheiro no mesmo projecto Apps Script que Code.gs.
+ * Sync Daniel → EVOB. Cole no projecto já ligado à folha EVOB
+ * «Leads Inbound META evob» (1aAKXH7TnV17uCemEol56X_0NNs6ZVAF3LrBpZHf9ZoaRlw8rn26t1_mo).
+ * Não crie outro projecto Apps Script.
  *
  * Daniel: 1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w
  *   título da folha: «Leads - Go Smile»

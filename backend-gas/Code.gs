@@ -2,6 +2,8 @@
  * Leads Go Smile — web app da aba «Leads (2024 - 2026)».
  *
  * Folha ligada ao Apps Script (live /exec): 1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8
+ * Projecto ligado a essa folha (não criar outro): «Leads Inbound META evob»
+ *   1aAKXH7TnV17uCemEol56X_0NNs6ZVAF3LrBpZHf9ZoaRlw8rn26t1_mo
  * A folha de Daniel 1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w (Constant Circle,
  * título «Leads - Go Smile») não está ligada a este script. O sync lê-a com
  * SpreadsheetApp.openById em SyncDaniel.gs (syncDanielToEvob). Não há projecto

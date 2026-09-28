@@ -7,7 +7,8 @@ Web app grátis, ligada à folha EVOB. Não há projecto Google Cloud, conta de 
 - Aba da web app: **Leads (2024 - 2026)** (nome exacto, com espaços)
 - A aba «Inbound META» não é lida nem escrita
 - Lista da app: coluna A **>= 2026-09-01** (Europe/Lisbon)
-- Sync Daniel → EVOB: [`SyncDaniel.gs`](./SyncDaniel.gs) no mesmo projecto. Passos em [SYNC-DANIEL-EVOB.md](../SYNC-DANIEL-EVOB.md). Etiqueta sugerida: `MacMini-daniel-sync-v1`
+- Projecto Apps Script já ligado a essa folha (colar aqui, não criar outro): **Leads Inbound META evob**, `1aAKXH7TnV17uCemEol56X_0NNs6ZVAF3LrBpZHf9ZoaRlw8rn26t1_mo`
+- Sync Daniel → EVOB: [`SyncDaniel.gs`](./SyncDaniel.gs) nesse projecto. Em 28 Set 2026 tinha **0 gatilhos** — por isso a EVOB ficou em 8. Passos em [SYNC-DANIEL-EVOB.md](../SYNC-DANIEL-EVOB.md). Etiqueta sugerida: `MacMini-daniel-sync-v1`
 
 O `/exec` em produção já está ligado à folha de cima. Este ficheiro regista esse ID. Não crie outra implementação por cima do URL live só para alinhar o repositório.
 
@@ -15,13 +16,12 @@ O Mini (Node, porta 3040) chama este `/exec` com o segredo. O browser nunca rece
 
 ## 1. Ligar o script à folha
 
-1. A folha ligada é `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8` (conta que a edita, de preferência brunoairesaugusto@gmail.com). A de daniel@constantcircle.co (`1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`, título «Leads - Go Smile») não é a folha deste script. O sync abre-a por ID; a conta tem de a poder editar.
-2. **Extensões → Apps Script**.
-3. Apague o `Code.gs` de exemplo e cole [`Code.gs`](./Code.gs). Crie outro ficheiro e cole [`SyncDaniel.gs`](./SyncDaniel.gs). Os dois ficam no mesmo projecto.
-4. Em **Definições do projecto → Mostrar ficheiro de manifesto**, confirme o [`appsscript.json`](./appsscript.json) (fuso `Europe/Lisbon`, runtime V8).
-5. Guarde.
+1. A folha ligada é `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8`. O projecto que já está ligado a ela é **Leads Inbound META evob**: [abrir o editor](https://script.google.com/d/1aAKXH7TnV17uCemEol56X_0NNs6ZVAF3LrBpZHf9ZoaRlw8rn26t1_mo/edit). Não crie um segundo projecto a partir da folha. A de daniel@constantcircle.co (`1qTEfJTz_m5x7TMil8MGeqZuTGAJD4oGbGmfCuWYZa7w`, título «Leads - Go Smile») abre-se por ID. A conta evobtob já a edita.
+2. Nesse editor, substitua o `Code.gs` por [`Code.gs`](./Code.gs) e crie `SyncDaniel.gs` com [`SyncDaniel.gs`](./SyncDaniel.gs).
+3. Em **Definições do projecto → Mostrar ficheiro de manifesto**, confirme o [`appsscript.json`](./appsscript.json) (fuso `Europe/Lisbon`, runtime V8).
+4. Guarde.
 
-O código abre `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8` pelo `SHEET_ID`. Mesmo assim o projecto tem de ficar **ligado a esta folha** (criado a partir dela), para a autorização ser a de Apps Script e não um projecto Cloud.
+O código abre `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8` pelo `SHEET_ID`. O projecto **Leads Inbound META evob** já está ligado a essa folha. Continue nesse projecto, para a autorização ser a de Apps Script e não um projecto Cloud.
 
 ## 2. Segredo
 
@@ -111,4 +111,4 @@ Depois de colar este `Code.gs`: **Implementar → Gerir implementações → lá
 
 ## 5. Sync Daniel → EVOB
 
-Cole também [`SyncDaniel.gs`](./SyncDaniel.gs) no mesmo projecto. No editor, corra `syncDanielToEvob` uma vez e crie um gatilho de 15 ou 30 minutos (ou corra `installDanielSyncTrigger`). Publique uma **nova versão** para o `/exec` aceitar `action=sync`. O corte mantém-se `2026-09-01`. Mapa de colunas, autorização e a verificação (Daniel 29, EVOB 8 em 28 Set 2026) estão em [SYNC-DANIEL-EVOB.md](../SYNC-DANIEL-EVOB.md).
+No projecto **Leads Inbound META evob** (não noutro): cole [`SyncDaniel.gs`](./SyncDaniel.gs), autorize, crie um gatilho temporal de `syncDanielToEvob` a cada 15–30 minutos (em 28 Set 2026 havia 0), corra a função uma vez e publique uma versão nova para `action=sync`. O corte mantém-se `2026-09-01`. A `doGet` falhada ~22:44 PT não é um sync. O alvo é a EVOB ≥ corte passar de 8 para ~29. Detalhe em [SYNC-DANIEL-EVOB.md](../SYNC-DANIEL-EVOB.md).

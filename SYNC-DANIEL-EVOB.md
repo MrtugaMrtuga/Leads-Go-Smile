@@ -1,6 +1,6 @@
 # Sync Daniel → EVOB
 
-O sync vive neste repositório: [`backend-gas/SyncDaniel.gs`](./backend-gas/SyncDaniel.gs), no mesmo projecto Apps Script da EVOB. Não há projecto Google Cloud, conta de serviço nem billing. O corte continua **2026-09-01** (`CONTACT_CUTOFF_DAY`).
+O sync vive neste repositório: [`backend-gas/SyncDaniel.gs`](./backend-gas/SyncDaniel.gs) mais `action=sync` em [`backend-gas/Code.gs`](./backend-gas/Code.gs). Cola-se no projecto **já ligado** à folha EVOB, «Leads Inbound META evob» (`1aAKXH7TnV17uCemEol56X_0NNs6ZVAF3LrBpZHf9ZoaRlw8rn26t1_mo`). Não se cria outro Apps Script, projecto Google Cloud, conta de serviço nem billing. O corte continua **2026-09-01** (`CONTACT_CUTOFF_DAY`).
 
 Etiqueta sugerida: `MacMini-daniel-sync-v1`.
 
@@ -55,21 +55,27 @@ Cabeçalhos lidos na aba de Daniel em 28 Set 2026, da coluna A à Q. O match é 
 
 Colunas extra de um lado ou do outro ficam de fora. O sync não acrescenta cabeçalhos.
 
+## Porque a EVOB ficou em 8
+
+Em 28 Set 2026 o projecto «Leads Inbound META evob» tinha **0 gatilhos**. `syncDanielToEvob` nunca foi agendado: nada copiava o Daniel para a EVOB. A execução falhada `doGet` (Execution API, Head, ~22:44 PT) não é uma corrida de sync. Pode ignorar-se.
+
+A conta **evobtob** tem permissão de editor na folha de Daniel, por isso `SpreadsheetApp.openById` funciona quando o script corre como essa conta. Não faz falta conta de serviço.
+
 ## Setup para o MacMiner
 
-A conta que corre o script (a do «Executar como: Eu») tem de conseguir **editar as duas folhas**. O script continua **ligado à folha EVOB**. `SpreadsheetApp.openById` abre a de Daniel. Na primeira execução o Google pede autorização de folhas de cálculo. Isso não é um projecto Cloud.
+Abra este projecto, não um novo:
 
-1. Abra a folha EVOB `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8` → **Extensões → Apps Script**.
-2. Confirme que [`Code.gs`](./backend-gas/Code.gs) está colado (inclui `action=sync` e o corte `2026-09-01`).
-3. **Ficheiro → Novo → Ficheiro de script**. Nome: `SyncDaniel`. Apague o exemplo e cole [`backend-gas/SyncDaniel.gs`](./backend-gas/SyncDaniel.gs). Guarde os dois.
-4. No selector de funções, escolha `syncDanielToEvob` → **Executar**. Autorize com a conta que edita as duas folhas. Não crie projecto Google Cloud nem conta de serviço.
-5. **Execuções** (ou Registos): o retorno é JSON, por exemplo `{"ok":true,"scanned":29,"inserted":21,"skipped":8,"errors":0,"cutoff":"2026-09-01","danielTab":"Leads (2024 - 2026)"}`. `errors` deve ser 0. `danielTab` deve ser `Leads (2024 - 2026)`.
-6. Gatilho: **Accionadores → Adicionar accionador**. Função `syncDanielToEvob`, origem **Orientado por tempo**, tipo **Temporizador de minutos**, intervalo **A cada 15 minutos** (ou 30). Falha de notificação: diária, para o seu email.
-   Em alternativa, corra uma vez `installDanielSyncTrigger` no editor. Se já existir um gatilho para `syncDanielToEvob`, não cria outro. Para mudar de 30 para 15, apague o antigo e volte a criar.
-7. **Implementar → Gerir implementações → lápis → Nova versão**. O URL `/exec` mantém-se. Sem versão nova, o Mini não tem `action=sync`. O gatilho e o «Executar» do editor usam o código gravado, não a versão publicada: a corrida manual do passo 4 já escreve na EVOB.
-8. No Mini, depois do pull: `POST /api/leads/sync` (ou só refrescar a lista). O endpoint chama `action=sync` e apaga a cache da lista (`clearLeadsListCache`). O segredo não sai do Mini.
+[Leads Inbound META evob](https://script.google.com/d/1aAKXH7TnV17uCemEol56X_0NNs6ZVAF3LrBpZHf9ZoaRlw8rn26t1_mo/edit)
 
-`action=leads`, `update`, `create` e `health` mantêm-se. O `/exec` antigo, mesmo antes da versão nova, passa a listar as linhas que o passo 4 acrescentou, porque lê a mesma aba.
+ID `1aAKXH7TnV17uCemEol56X_0NNs6ZVAF3LrBpZHf9ZoaRlw8rn26t1_mo`, ligado à folha EVOB `1tayieZBzhif_WP1FSJGs_hCoBkbkqN4yWlPfw1N96y8`. Autorize com a conta que edita as duas folhas (evobtob já edita o Daniel).
+
+1. **Colar.** Substitua o `Code.gs` pelo de [`backend-gas/Code.gs`](./backend-gas/Code.gs) (traz `action=sync` e mantém `CONTACT_CUTOFF_DAY = '2026-09-01'`). **Ficheiro → Novo → Ficheiro de script**, nome `SyncDaniel`, cole [`backend-gas/SyncDaniel.gs`](./backend-gas/SyncDaniel.gs). Guarde. Não crie outro projecto.
+2. **Autorizar.** No selector, escolha `syncDanielToEvob` → **Executar**. Aceite o acesso a folhas de cálculo (as duas folhas). Não é um projecto Cloud.
+3. **Gatilho.** **Accionadores → Adicionar accionador**. Função `syncDanielToEvob`, origem **Orientado por tempo**, temporizador de minutos, **a cada 15 minutos** (ou 30). Hoje há zero; este passo é o que faltava. Em alternativa, corra `installDanielSyncTrigger` uma vez (15 minutos; se já existir um gatilho com esse nome, não cria outro).
+4. **Correr uma vez.** Execute `syncDanielToEvob` no editor (se o passo 2 já tiver terminado a corrida, esta segunda mostra `inserted: 0` e `skipped` igual a `scanned` — é o resultado certo). Em **Execuções**, o registo traz `cutoff: "2026-09-01"` e `danielTab: "Leads (2024 - 2026)"`. `errors` a 0. A EVOB com coluna A ≥ 2026-09-01 deve aproximar-se das 29 do Daniel. Na primeira corrida com a EVOB ainda em 8, espere algo como `{"ok":true,"scanned":29,"inserted":21,"skipped":8,"errors":0}`.
+5. **Republicar** a aplicação web, porque o código acrescenta `action=sync`: **Implementar → Gerir implementações → lápis → Nova versão**. O URL `/exec` mantém-se. O gatilho e o Executar do editor usam o código gravado e já escreveram na folha no passo 4. A versão nova só é precisa para o Mini chamar `action=sync`. `action=leads`, `update`, `create` e `health` não mudam. O `/exec` que já está no ar lista as linhas novas mesmo antes desta versão, porque lê a mesma aba.
+
+No Mini, depois do pull: `POST /api/leads/sync` corre o sync e apaga a cache da lista. Sem esse endpoint, um refresh da PWA chega, desde que o passo 4 já tenha corrido: o refresh lê a EVOB.
 
 ## Como verificar Daniel vs EVOB
 
@@ -90,4 +96,4 @@ curl -s http://127.0.0.1:3040/api/leads | node -e "let s='';process.stdin.on('da
 
 O `POST` devolve `scanned`, `inserted`, `skipped`, `errors` e `cacheCleared: true`. A lista a seguir deve andar à volta de **29**. Se o PWA só refrescar a EVOB, o número sobe na mesma depois do sync do editor ou do gatilho — o refresh lê a EVOB, não o Daniel.
 
-Checklist: publicar versão nova do Apps Script, criar ou corrigir o gatilho (15–30 min), correr o sync uma vez, confirmar que a EVOB ≥ 2026-09-01 se aproxima das 29 do Daniel, e que o Mini mostra ~29 depois de refrescar.
+Checklist: colar em «Leads Inbound META evob», autorizar, criar o gatilho de `syncDanielToEvob` (15–30 min), correr uma vez, republicar a web app por causa de `action=sync`. A EVOB ≥ 2026-09-01 aproxima-se das 29 do Daniel e o Mini mostra ~29 depois de refrescar.
