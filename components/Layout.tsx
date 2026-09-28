@@ -13,6 +13,8 @@ interface LayoutProps {
   onNextMonth?: () => void;
   onSync?: () => void;
   isSyncing?: boolean;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 const Layout: React.FC<LayoutProps> = ({
@@ -24,16 +26,30 @@ const Layout: React.FC<LayoutProps> = ({
   currentMonthLabel,
   onPrevMonth,
   onNextMonth,
-  onSync,
-  isSyncing,
+  onRefresh,
+  isRefreshing,
 }) => {
   return (
     <div className="app">
       <header className="header">
         <span className="word">GoSmile</span>
-        <button type="button" className="header-right" aria-label="Admin" onClick={() => setActiveView('admin')}>
-          <img className="logo-img" src="/logo_Gosmilesimple.png" alt="" />
-        </button>
+        <div className="header-tools">
+          {onRefresh && (
+            <button
+              type="button"
+              className="refresh-btn"
+              aria-label="Atualizar leads"
+              aria-busy={isRefreshing || undefined}
+              disabled={isRefreshing}
+              onClick={onRefresh}
+            >
+              {isRefreshing ? 'A atualizar…' : 'Atualizar'}
+            </button>
+          )}
+          <button type="button" className="header-right" aria-label="Admin" onClick={() => setActiveView('admin')}>
+            <img className="logo-img" src="/logo_Gosmilesimple.png" alt="" />
+          </button>
+        </div>
       </header>
 
       <h1 className="page-title">{title}</h1>

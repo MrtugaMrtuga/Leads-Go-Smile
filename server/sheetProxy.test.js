@@ -581,6 +581,96 @@ test('stale GET returns the cache immediately and fresh=1 waits for the sheet', 
   });
 });
 
+test('fresh=1 and POST /api/leads/refresh bypass a warm TTL and reread the sheet', async () => {
+  await clearLeadsListCache();
+  process.env.LEADS_CACHE_TTL_MS = '45000';
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  let calls = 0;
+  const app = createApp();
+
+  await withFetch(async () => {
+    calls += 1;
+    const values = [...IDA_VALUES];
+    if (calls > 1) values[2] = 'Lead Depois do Refresh';
+    return new Response(JSON.stringify(sheetPayload(values)), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }, async () => {
+    const cold = await call(app, 'GET', '/api/leads');
+    assert.equal(cold.headers['x-leads-cache'], 'miss');
+    assert.equal(cold.json[0].name, 'Ida Cristina Albuquerque Malho Rodrigues de Oliveira');
+    assert.equal(calls, 1);
+
+    const started = Date.now();
+    const warm = await call(app, 'GET', '/api/leads');
+    assert.ok(Date.now() - started < 1000, 'warm GET should stay on the TTL cache');
+    assert.equal(warm.headers['x-leads-cache'], 'hit');
+    assert.equal(warm.json[0].name, cold.json[0].name);
+    assert.equal(calls, 1);
+
+    const fresh = await call(app, 'GET', '/api/leads?fresh=1');
+    assert.equal(fresh.status, 200);
+    assert.equal(fresh.headers['x-leads-cache'], 'hit');
+    assert.equal(fresh.json[0].name, cold.json[0].name);
+    assert.equal(calls, 1);
+
+    const refreshed = await call(app, 'POST', '/api/leads/refresh');
+    assert.equal(refreshed.status, 200);
+    assert.equal(refreshed.headers['x-leads-cache'], 'refresh');
+    assert.equal(refreshed.headers['cache-control'], 'no-store');
+    assert.equal(refreshed.json[0].name, 'Lead Depois do Refresh');
+    assert.equal(calls, 2);
+
+    const after = await call(app, 'GET', '/api/leads');
+    assert.equal(after.headers['x-leads-cache'], 'hit');
+    assert.equal(after.json[0].name, 'Lead Depois do Refresh');
+    assert.equal(calls, 2);
+  });
+
+  let saved = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      saved = JSON.parse(await readFile(join(dataDir, 'leads-cache.json'), 'utf8'));
+      if (saved?.leads?.[0]?.name === 'Lead Depois do Refresh') break;
+    } catch {
+      /* persist is queued after the response */
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.equal(saved?.leads?.[0]?.name, 'Lead Depois do Refresh');
+});
+
+test('the header refresh replaces the browser cache and keeps the contact cutoff', () => {
+  const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
+  const layout = readFileSync(new URL('../components/Layout.tsx', import.meta.url), 'utf8');
+  const api = readFileSync(new URL('../api.ts', import.meta.url), 'utf8');
+  const cache = readFileSync(new URL('../leadCache.ts', import.meta.url), 'utf8');
+  const server = readFileSync(new URL('./index.js', import.meta.url), 'utf8');
+  const client = readFileSync(new URL('./sheetClient.js', import.meta.url), 'utf8');
+  const meta = readFileSync(new URL('../shared/inboundMeta.js', import.meta.url), 'utf8');
+  const gas = readFileSync(new URL('../backend-gas/Code.gs', import.meta.url), 'utf8');
+  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  assert.match(layout, /aria-label="Atualizar leads"/);
+  assert.match(layout, /A atualizar…/);
+  assert.match(layout, /'Atualizar'/);
+  assert.match(layout, /logo_Gosmilesimple\.png/);
+  assert.match(app, /refreshLeads\(/);
+  assert.match(app, /clearCachedLeads\(\)/);
+  assert.match(app, /onRefresh=\{refreshFromSheet\}/);
+  assert.match(api, /\/api\/leads\/refresh/);
+  assert.match(cache, /removeItem\(KEY\)/);
+  assert.match(cache, /gosmile-leads-swr-v1/);
+  assert.match(server, /\/leads\/refresh/);
+  assert.match(server, /bypassCache: true/);
+  assert.match(client, /clearLeadsListCache/);
+  assert.match(meta, /export const CONTACT_CUTOFF_DAY = '2026-09-01'/);
+  assert.match(gas, /var CONTACT_CUTOFF_DAY = '2026-09-01'/);
+  assert.match(readme, /MacMini-leads-refresh-v1/);
+  assert.match(readme, /2026-09-01/);
+});
+
 test('leads-cache.json is served on a cold process and leads.json is not the list', async () => {
   await clearLeadsListCache();
   process.env.LEADS_CACHE_TTL_MS = '60000';

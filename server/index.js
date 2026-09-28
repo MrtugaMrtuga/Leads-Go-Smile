@@ -169,6 +169,17 @@ export function createApiRouter() {
     }
   });
 
+  api.post('/leads/refresh', async (_req, res) => {
+    try {
+      const result = await listInboundLeads({ bypassCache: true });
+      res.set('Cache-Control', 'no-store');
+      res.set('X-Leads-Cache', result.cache);
+      res.json(result.leads);
+    } catch (error) {
+      sendSheetError(res, error);
+    }
+  });
+
   api.post('/sync/inbound-meta', async (_req, res) => {
     try {
       const { leads, configured } = await listInboundLeads();

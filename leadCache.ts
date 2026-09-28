@@ -21,3 +21,11 @@ export function writeCachedLeads(leads: Lead[]) {
     /* private mode or quota — the sheet stays the source of truth */
   }
 }
+
+export function clearCachedLeads() {
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    /* private mode — nothing stored to drop */
+  }
+}
