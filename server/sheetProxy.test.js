@@ -652,6 +652,7 @@ test('the header refresh replaces the browser cache and keeps the contact cutoff
   const meta = readFileSync(new URL('../shared/inboundMeta.js', import.meta.url), 'utf8');
   const gas = readFileSync(new URL('../backend-gas/Code.gs', import.meta.url), 'utf8');
   const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const vite = readFileSync(new URL('../vite.config.ts', import.meta.url), 'utf8');
   assert.match(layout, /aria-label="Atualizar leads"/);
   assert.match(layout, /A atualizar…/);
   assert.match(layout, /'Atualizar'/);
@@ -669,6 +670,8 @@ test('the header refresh replaces the browser cache and keeps the contact cutoff
   assert.match(gas, /var CONTACT_CUTOFF_DAY = '2026-09-01'/);
   assert.match(readme, /MacMini-leads-refresh-v1/);
   assert.match(readme, /2026-09-01/);
+  assert.match(vite, /bypass\(req\)/);
+  assert.match(vite, /\[a-z0-9\]/);
 });
 
 test('leads-cache.json is served on a cold process and leads.json is not the list', async () => {
