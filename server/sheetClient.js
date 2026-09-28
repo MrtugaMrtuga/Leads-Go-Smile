@@ -208,6 +208,9 @@ function commitCache(leads, meta = {}) {
     readMs: meta.readMs ?? null,
     readRows: meta.readRows ?? null,
     scannedRows: meta.scannedRows ?? null,
+    gasCacheAgeMs: meta.gasCacheAgeMs ?? null,
+    columns: meta.columns ?? null,
+    sheetColumns: meta.sheetColumns ?? null,
   };
   listCache = snapshot;
   persistCache(snapshot);
@@ -218,6 +221,9 @@ function metaFromPayload(payload, gasMs) {
   const readMs = Number(payload?.readMs);
   const readRows = Number(payload?.readRows);
   const scannedRows = Number(payload?.scannedRows);
+  const gasCacheAgeMs = Number(payload?.gasCacheAgeMs);
+  const columns = Number(payload?.columns);
+  const sheetColumns = Number(payload?.sheetColumns);
   return {
     gasMs,
     gasCache: String(payload?.gasCache || ''),
@@ -225,6 +231,9 @@ function metaFromPayload(payload, gasMs) {
     readMs: Number.isFinite(readMs) ? readMs : null,
     readRows: Number.isFinite(readRows) ? readRows : null,
     scannedRows: Number.isFinite(scannedRows) ? scannedRows : null,
+    gasCacheAgeMs: Number.isFinite(gasCacheAgeMs) ? gasCacheAgeMs : null,
+    columns: Number.isFinite(columns) ? columns : null,
+    sheetColumns: Number.isFinite(sheetColumns) ? sheetColumns : null,
   };
 }
 
@@ -426,7 +435,7 @@ export async function listInboundLeads(options = {}) {
   const cfg = appsScriptConfig(options.env);
   if (!cfg.configured) return { leads: [], configured: false, cache: 'unconfigured' };
 
-  const { fresh = false, bypassCache = false, ...gasOptions } = options;
+  const { fresh = false, bypassCache = false, sheetFresh = false, ...gasOptions } = options;
 
   // A forced refresh must not wipe memory or the cache file first. Wiping
   // waits on the disk queue and forgets an in-flight sheet read while that
@@ -449,7 +458,7 @@ export async function listInboundLeads(options = {}) {
   }
 
   try {
-    const snapshot = await revalidate(bypassCache ? { ...gasOptions, sheetFresh: true } : gasOptions);
+    const snapshot = await revalidate({ ...gasOptions, sheetFresh: Boolean(sheetFresh) });
     if (!snapshot || !Array.isArray(snapshot.leads)) {
       throw new SheetError(`Folha «${SHEET_TAB}» indisponível`);
     }
@@ -464,6 +473,9 @@ export async function listInboundLeads(options = {}) {
       readMs: snapshot.readMs ?? null,
       readRows: snapshot.readRows ?? null,
       scannedRows: snapshot.scannedRows ?? null,
+      gasCacheAgeMs: snapshot.gasCacheAgeMs ?? null,
+      columns: snapshot.columns ?? null,
+      sheetColumns: snapshot.sheetColumns ?? null,
     };
   } catch (error) {
     if (!bypassCache && hadCache && listCache && Array.isArray(listCache.leads)) {
@@ -553,17 +565,20 @@ export async function createInboundLead(input, options = {}) {
   return lead;
 }
 
-const DEFAULT_WARM_MS = 180_000;
+const DEFAULT_WARM_MS = 120_000;
 
 export function sheetWarmerConfig(env = process.env) {
   const raw = env.LEADS_WARM_MS;
   const intervalMs = raw === undefined || raw === '' ? DEFAULT_WARM_MS : Number(raw);
   const enabled = Number.isFinite(intervalMs) && intervalMs >= 60_000;
-  const action = String(env.LEADS_WARM_ACTION || 'ping').trim() || 'ping';
+  const action = String(env.LEADS_WARM_ACTION || 'leads').trim() || 'leads';
   return { enabled, intervalMs: enabled ? intervalMs : 0, action };
 }
 
-/** Keep the Apps Script web app from going cold. Does not read the sheet unless LEADS_WARM_ACTION=leads. */
+/**
+ * Refill the Apps Script list cache (action=leads&fresh=1) so the next
+ * Actualizar is a CacheService hit. LEADS_WARM_ACTION=ping only wakes /exec.
+ */
 export function warmAppsScript() {
   const { configured } = appsScriptConfig();
   if (!configured) throw new SheetError('Apps Script não configurado', 503);
@@ -571,7 +586,7 @@ export function warmAppsScript() {
   if (action !== 'ping' && action !== 'leads' && action !== 'health') {
     throw new SheetError('LEADS_WARM_ACTION inválida', 500);
   }
-  return gasRequest({ action, method: 'GET', lane: 'warm' });
+  return gasRequest({ action, method: 'GET', lane: 'warm', fresh: action === 'leads' });
 }
 
 export function startSheetWarmer() {

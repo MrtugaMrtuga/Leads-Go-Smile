@@ -14,10 +14,12 @@
  * literal «4», em regra a coluna A) é >= 2026-09-01 (dia de calendário Europe/Lisbon).
  * Data Contacto é texto de CRM e não decide a lista. update/create não aplicam este corte.
  * action=leads lê essa coluna com getDisplayValues (uma coluna), depois
- * getDisplayValues só do bloco que passa o corte (sheetRead=tail).
- * CacheService guarda esse JSON 30s.
- * fresh=1 ignora a cache e volta a ler a folha. update/create e um sync com
- * inserções chamam bumpLeadsCache_. action=ping não lê a folha.
+ * getDisplayValues só das colunas mapeadas no bloco que passa o corte
+ * (sheetRead=tail). A resposta da lista não repete o array leads.
+ * CacheService guarda esse JSON 180s. Sem fresh=1, um hit não relê a folha.
+ * fresh=1 ignora a cache (medição, e o ping de refill do Mini).
+ * update/create e um sync com inserções chamam bumpLeadsCache_.
+ * action=ping não lê a folha.
  * action=sync corre syncDanielToEvob e não muda o corte nem as outras ações.
  *
  * Segredo: propriedade do script APPS_SCRIPT_SECRET, igual à env do Mini.
@@ -363,7 +365,7 @@ function readTable_(sheet) {
 }
 
 var LEADS_CACHE_KEY = 'leads-list-v3';
-var LEADS_CACHE_TTL_SEC = 30;
+var LEADS_CACHE_TTL_SEC = 180;
 var LEADS_GEN_KEY = 'LEADS_LIST_GEN';
 
 function isDate_(value) {
@@ -392,20 +394,37 @@ function timestampColumnIndex_(headers) {
  * drops them. More than 8 runs falls back to the bounding box so a scrambled
  * sheet is still complete.
  */
+function listColumnCount_(headers, lastColumn) {
+  var indexed = indexHeaders_(headers);
+  var last = 1;
+  for (var i = 0; i < COLUMN_DEFS.length; i += 1) {
+    var column = findDefColumn_(indexed, COLUMN_DEFS[i]);
+    if (column && column.index + 1 > last) last = column.index + 1;
+  }
+  if (last > lastColumn) last = lastColumn;
+  return last;
+}
+
 function readLeadsTable_(sheet) {
   var lastRow = sheet.getLastRow();
   var lastColumn = Math.max(sheet.getLastColumn(), 1);
-  if (lastRow < 1) return { headers: [], rows: [], scannedRows: 0, readRows: 0 };
-  var headers = trimRow_(sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0] || []);
-  if (lastRow < 2) return { headers: headers, rows: [], scannedRows: 0, readRows: 0 };
+  if (lastRow < 1) return { headers: [], rows: [], scannedRows: 0, readRows: 0, columns: 0, sheetColumns: 0 };
+  var fullHeaders = trimRow_(sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0] || []);
+  var width = listColumnCount_(fullHeaders, lastColumn);
+  var headers = fullHeaders.slice(0, width);
+  if (lastRow < 2) {
+    return { headers: headers, rows: [], scannedRows: 0, readRows: 0, columns: width, sheetColumns: lastColumn };
+  }
 
   var scanned = lastRow - 1;
-  var stamps = sheet.getRange(2, timestampColumnIndex_(headers) + 1, scanned, 1).getDisplayValues();
+  var stamps = sheet.getRange(2, timestampColumnIndex_(fullHeaders) + 1, scanned, 1).getDisplayValues();
   var matches = [];
   for (var i = 0; i < stamps.length; i += 1) {
     if (stampPassesCutoff_(stamps[i][0])) matches.push(i);
   }
-  if (!matches.length) return { headers: headers, rows: [], scannedRows: scanned, readRows: 0 };
+  if (!matches.length) {
+    return { headers: headers, rows: [], scannedRows: scanned, readRows: 0, columns: width, sheetColumns: lastColumn };
+  }
 
   var runs = [];
   var runStart = matches[0];
@@ -428,13 +447,20 @@ function readLeadsTable_(sheet) {
   for (var run = 0; run < runs.length; run += 1) {
     var startRow = runs[run][0] + 2;
     var height = runs[run][1] - runs[run][0] + 1;
-    var block = sheet.getRange(startRow, 1, height, lastColumn).getDisplayValues();
+    var block = sheet.getRange(startRow, 1, height, width).getDisplayValues();
     readRows += height;
     for (var r = 0; r < block.length; r += 1) {
       rows.push({ row: startRow + r, values: trimRow_(block[r]) });
     }
   }
-  return { headers: headers, rows: rows, scannedRows: scanned, readRows: readRows };
+  return {
+    headers: headers,
+    rows: rows,
+    scannedRows: scanned,
+    readRows: readRows,
+    columns: width,
+    sheetColumns: lastColumn
+  };
 }
 
 function readHeaderAndRow_(sheet, rowNumber) {
@@ -472,7 +498,10 @@ function packLeadsCache_(gen, payload) {
     scannedRows: payload.scannedRows,
     readRows: payload.readRows,
     readMs: payload.readMs,
-    sheetRead: payload.sheetRead
+    sheetRead: payload.sheetRead,
+    columns: payload.columns,
+    sheetColumns: payload.sheetColumns,
+    leadsOmitted: payload.leadsOmitted
   };
   var pack = JSON.stringify({ gen: gen, at: new Date().getTime(), payload: body });
   if (pack.length > 60000) {
@@ -504,7 +533,9 @@ function loadLeadsPayload_(force) {
 
   var started = new Date().getTime();
   var table = readLeadsTable_(getLeadsSheet_());
-  var payload = tablePayload_(table);
+  var payload = tablePayload_(table, true);
+  payload.columns = table.columns || 0;
+  payload.sheetColumns = table.sheetColumns || 0;
   payload.scannedRows = table.scannedRows || 0;
   payload.readRows = table.readRows || 0;
   payload.readMs = new Date().getTime() - started;
@@ -613,28 +644,33 @@ function buildLead_(headers, values, sheetRow) {
   };
 }
 
-function tablePayload_(table) {
+function tablePayload_(table, lean) {
   var leads = [];
   var rows = [];
   table.rows.forEach(function (row) {
     var raw = rawFromRow_(table.headers, row.values);
     if (!passesContactCutoff_(raw)) return;
-    var lead = buildLead_(table.headers, row.values, row.row);
-    if (!lead) return;
-    leads.push(lead);
+    if (!raw.nome) return;
+    if (!lean) {
+      var lead = buildLead_(table.headers, row.values, row.row);
+      if (!lead) return;
+      leads.push(lead);
+    }
     rows.push(row);
   });
-  return {
+  var payload = {
     ok: true,
     sheetId: SHEET_ID,
     sheetTab: SHEET_TAB,
     contactCutoff: CONTACT_CUTOFF_DAY,
     contactCutoffTimeZone: 'Europe/Lisbon',
-    count: leads.length,
+    count: lean ? rows.length : leads.length,
     headers: table.headers,
-    rows: rows,
-    leads: leads
+    rows: rows
   };
+  if (lean) payload.leadsOmitted = true;
+  else payload.leads = leads;
+  return payload;
 }
 
 function applyFields_(sheet, rowNumber, fields) {

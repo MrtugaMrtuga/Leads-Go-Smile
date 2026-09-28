@@ -144,6 +144,9 @@ function sendLeads(res, result) {
     if (result.readMs != null) res.set('X-Leads-Read-Ms', String(result.readMs));
     if (result.readRows != null) res.set('X-Leads-Read-Rows', String(result.readRows));
     if (result.scannedRows != null) res.set('X-Leads-Scanned-Rows', String(result.scannedRows));
+    if (result.gasCacheAgeMs != null) res.set('X-Leads-Gas-Age-Ms', String(result.gasCacheAgeMs));
+    if (result.columns != null) res.set('X-Leads-Columns', String(result.columns));
+    if (result.sheetColumns != null) res.set('X-Leads-Sheet-Columns', String(result.sheetColumns));
     res.set('Server-Timing', `gas;dur=${result.gasMs}`);
   }
   res.json(result.leads);
@@ -187,9 +190,10 @@ export function createApiRouter() {
     }
   });
 
-  api.post('/leads/refresh', async (_req, res) => {
+  api.post('/leads/refresh', async (req, res) => {
     try {
-      sendLeads(res, await listInboundLeads({ bypassCache: true }));
+      const sheetFresh = String(req.query.fresh || '') === '1';
+      sendLeads(res, await listInboundLeads({ bypassCache: true, sheetFresh }));
     } catch (error) {
       sendSheetError(res, error);
     }

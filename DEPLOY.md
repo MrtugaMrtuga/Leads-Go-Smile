@@ -113,9 +113,9 @@ rsync -a data/settings.json data/reminders.json /Volumes/Backup/evault-leads-dat
 
 ## 8. Manter o Apps Script quente
 
-O `/exec` arrefece ao fim de alguns minutos sem chamadas. A primeira chamada a frio pode passar dos 55s (o Mini aborta e tenta outra vez) — foi o formato do fumo de ~79s. Com o processo Node a correr, um ping sai a cada **3 minutos** (`LEADS_WARM_MS`, acção `ping`, sem ler a folha). `LEADS_WARM_MS=0` desliga.
+O `/exec` arrefece ao fim de alguns minutos sem chamadas. A frio, um refresh chegou a ~79s. Quente, a leitura da folha ficou em 3–8s. O hit do `CacheService` é que pode ficar abaixo de 2–3s. Com o Node a correr, a cada **2 minutos** (`LEADS_WARM_MS`) sai `action=leads&fresh=1`, que volta a encher essa cache (TTL 180s). `LEADS_WARM_ACTION=ping` só acorda o `/exec` e não lê a folha. `LEADS_WARM_MS=0` desliga.
 
-Confirme em `GET /api/health` os campos `leadsWarmMs` (180000) e `leadsWarmAction` (`ping`).
+Confirme em `GET /api/health` os campos `leadsWarmMs` (120000) e `leadsWarmAction` (`leads`).
 
 O LaunchAgent [org.evault.leads.warm.plist](./deploy/org.evault.leads.warm.plist) faz o mesmo POST a `/api/leads/warm`. Só o carregue se desligou o intervalo do Node. Os dois ao mesmo tempo só duplicam pings.
 

@@ -597,7 +597,7 @@ test('fresh=1 and POST /api/leads/refresh bypass a warm TTL and reread the sheet
   await withFetch(async (url) => {
     calls += 1;
     if (calls === 1) assert.doesNotMatch(String(url), /[?&]fresh=1/);
-    if (calls === 2) assert.match(String(url), /[?&]fresh=1/);
+    if (calls === 2) assert.doesNotMatch(String(url), /[?&]fresh=1/);
     const values = [...IDA_VALUES];
     if (calls > 1) values[2] = 'Lead Depois do Refresh';
     return new Response(JSON.stringify(sheetPayload(values)), {
@@ -967,7 +967,7 @@ test('the inbox hydrates a saved list and does not treat the first paint as empt
   assert.match(readFileSync(new URL('../README.md', import.meta.url), 'utf8'), /MacMini-leads-swr-v1/);
 });
 
-test('refresh bypasses the Apps Script cache, warm ping does not read the list, and sync does not block it', async () => {
+test('refresh uses the Apps Script cache, warm refills it, and sync does not block it', async () => {
   await clearLeadsListCache();
   process.env.LEADS_CACHE_TTL_MS = '45000';
   process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
@@ -982,7 +982,11 @@ test('refresh bypasses the Apps Script cache, warm ping does not read the list, 
   assert.doesNotMatch(leadsBranch, /readTable_/);
   const readFn = gas.slice(gas.indexOf('function readLeadsTable_'), gas.indexOf('function readHeaderAndRow_'));
   assert.match(gas, /function readLeadsTable_/);
-  assert.match(gas, /LEADS_CACHE_TTL_SEC = 30/);
+  assert.match(gas, /LEADS_CACHE_TTL_SEC = 180/);
+  assert.match(gas, /function listColumnCount_/);
+  assert.match(gas, /leadsOmitted = true/);
+  assert.match(gas, /tablePayload_\(table, true\)/);
+  assert.match(readFn, /listColumnCount_/);
   assert.match(gas, /CacheService\.getScriptCache/);
   assert.match(gas, /bumpLeadsCache_/);
   assert.match(gas, /sheetRead = 'tail'/);
@@ -1036,13 +1040,21 @@ test('refresh bypasses the Apps Script cache, warm ping does not read the list, 
         headers: { 'content-type': 'application/json' },
       });
     }, async () => {
+      delete process.env.LEADS_WARM_ACTION;
       const warm = await call(app, 'POST', '/api/leads/warm');
       assert.equal(warm.status, 200);
       assert.equal(warm.json.ok, true);
       assert.equal(warm.json.skipped, false);
       assert.equal(warm.json.contactCutoff, '2026-09-01');
-      assert.match(urls[0], /action=ping/);
-      assert.doesNotMatch(urls[0], /action=leads/);
+      assert.match(urls[0], /action=leads/);
+      assert.match(urls[0], /[?&]fresh=1/);
+
+      process.env.LEADS_WARM_ACTION = 'ping';
+      const ping = await call(app, 'POST', '/api/leads/warm');
+      assert.equal(ping.status, 200);
+      assert.match(urls[1], /action=ping/);
+      assert.doesNotMatch(urls[1], /action=leads/);
+      delete process.env.LEADS_WARM_ACTION;
 
       const syncPromise = call(app, 'POST', '/api/leads/sync');
       await syncStarted;
@@ -1058,15 +1070,16 @@ test('refresh bypasses the Apps Script cache, warm ping does not read the list, 
       assert.equal(refreshed.headers['x-leads-cache'], 'refresh');
       assert.equal(refreshed.headers['x-leads-sheet-read'], 'tail');
       assert.ok(elapsed < 1000, `refresh took ${elapsed}ms while sync was in flight`);
-      const refreshUrl = urls.find((href) => href.includes('action=leads'));
-      assert.ok(refreshUrl);
-      assert.match(refreshUrl, /[?&]fresh=1/);
+      const leadUrls = urls.filter((href) => href.includes('action=leads'));
+      assert.equal(leadUrls.length, 2);
+      assert.doesNotMatch(leadUrls[1], /[?&]fresh=1/);
       releaseSync();
       const sync = await syncPromise;
       assert.equal(sync.status, 200);
       assert.equal(sync.json.cacheCleared, true);
     });
   } finally {
+    delete process.env.LEADS_WARM_ACTION;
     releaseSync();
   }
 });
