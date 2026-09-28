@@ -10,10 +10,17 @@
  * Cloud nem conta de serviço. A web app continua a ler e escrever só a aba
  * «Leads (2024 - 2026)» da EVOB.
  *
- * A lista (action=leads) inclui só linhas cuja coluna A (cabeçalho literal «4»,
- * timestamp ISO) é >= 2026-09-01 (dia de calendário Europe/Lisbon).
+ * A lista (action=leads) inclui só linhas cuja coluna do timestamp (cabeçalho
+ * literal «4», em regra a coluna A) é >= 2026-09-01 (dia de calendário Europe/Lisbon).
  * Data Contacto é texto de CRM e não decide a lista. update/create não aplicam este corte.
- * action=sync corre syncDanielToEvob e não muda action=leads|update|create|health.
+ * action=leads lê essa coluna com getDisplayValues (uma coluna), depois
+ * getDisplayValues só das colunas mapeadas no bloco que passa o corte
+ * (sheetRead=tail). A lista devolve só leads (rowsOmitted). O Mini não
+ * precisa das linhas cruas.
+ * CacheService guarda esse JSON 60s. Sem fresh=1, um hit não relê a folha.
+ * fresh=1 ignora a cache. update/create e um sync com inserções chamam
+ * bumpLeadsCache_. action=ping não lê a folha.
+ * action=sync corre syncDanielToEvob e não muda o corte nem as outras ações.
  *
  * Segredo: propriedade do script APPS_SCRIPT_SECRET, igual à env do Mini.
  * O mapeamento de colunas espelha shared/inboundMeta.js.
@@ -342,6 +349,7 @@ function trimRow_(row) {
   });
 }
 
+/** Full grid. Sync still needs every EVOB row for dedupe. The list does not. */
 function readTable_(sheet) {
   var lastRow = sheet.getLastRow();
   var lastColumn = sheet.getLastColumn();
@@ -354,6 +362,186 @@ function readTable_(sheet) {
     rows.push({ row: r + 1, values: trimRow_(values[r]) });
   }
   return { headers: headers, rows: rows };
+}
+
+var LEADS_CACHE_KEY = 'leads-list-v3';
+var LEADS_CACHE_TTL_SEC = 60;
+var LEADS_GEN_KEY = 'LEADS_LIST_GEN';
+
+function isDate_(value) {
+  return Object.prototype.toString.call(value) === '[object Date]';
+}
+
+function stampPassesCutoff_(value) {
+  if (isDate_(value)) {
+    if (isNaN(value.getTime())) return false;
+    return Utilities.formatDate(value, 'Europe/Lisbon', 'yyyy-MM-dd') >= CONTACT_CUTOFF_DAY;
+  }
+  var day = contactDayFromText_(value);
+  return Boolean(day) && day >= CONTACT_CUTOFF_DAY;
+}
+
+function timestampColumnIndex_(headers) {
+  var column = findDefColumn_(indexHeaders_(headers), defByKey_('timestamp_col'));
+  return column ? column.index : 0;
+}
+
+/**
+ * List read: display values of the timestamp column only, then display values
+ * of the runs that pass CONTACT_CUTOFF_DAY. The same display text the row
+ * filter uses, not a Date conversion. A chronological sheet (appended rows)
+ * is one short tail. Gaps under 20 rows stay in the run and tablePayload_
+ * drops them. More than 8 runs falls back to the bounding box so a scrambled
+ * sheet is still complete.
+ */
+function listColumnCount_(headers, lastColumn) {
+  var indexed = indexHeaders_(headers);
+  var last = 1;
+  for (var i = 0; i < COLUMN_DEFS.length; i += 1) {
+    var column = findDefColumn_(indexed, COLUMN_DEFS[i]);
+    if (column && column.index + 1 > last) last = column.index + 1;
+  }
+  if (last > lastColumn) last = lastColumn;
+  return last;
+}
+
+function readLeadsTable_(sheet) {
+  var lastRow = sheet.getLastRow();
+  var lastColumn = Math.max(sheet.getLastColumn(), 1);
+  if (lastRow < 1) return { headers: [], rows: [], scannedRows: 0, readRows: 0, columns: 0, sheetColumns: 0 };
+  var fullHeaders = trimRow_(sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0] || []);
+  var width = listColumnCount_(fullHeaders, lastColumn);
+  var headers = fullHeaders.slice(0, width);
+  if (lastRow < 2) {
+    return { headers: headers, rows: [], scannedRows: 0, readRows: 0, columns: width, sheetColumns: lastColumn };
+  }
+
+  var scanned = lastRow - 1;
+  var stamps = sheet.getRange(2, timestampColumnIndex_(fullHeaders) + 1, scanned, 1).getDisplayValues();
+  var matches = [];
+  for (var i = 0; i < stamps.length; i += 1) {
+    if (stampPassesCutoff_(stamps[i][0])) matches.push(i);
+  }
+  if (!matches.length) {
+    return { headers: headers, rows: [], scannedRows: scanned, readRows: 0, columns: width, sheetColumns: lastColumn };
+  }
+
+  var runs = [];
+  var runStart = matches[0];
+  var prev = matches[0];
+  for (var m = 1; m < matches.length; m += 1) {
+    var index = matches[m];
+    if (index - prev < 20) {
+      prev = index;
+      continue;
+    }
+    runs.push([runStart, prev]);
+    runStart = index;
+    prev = index;
+  }
+  runs.push([runStart, prev]);
+  if (runs.length > 8) runs = [[matches[0], matches[matches.length - 1]]];
+
+  var rows = [];
+  var readRows = 0;
+  for (var run = 0; run < runs.length; run += 1) {
+    var startRow = runs[run][0] + 2;
+    var height = runs[run][1] - runs[run][0] + 1;
+    var block = sheet.getRange(startRow, 1, height, width).getDisplayValues();
+    readRows += height;
+    for (var r = 0; r < block.length; r += 1) {
+      rows.push({ row: startRow + r, values: trimRow_(block[r]) });
+    }
+  }
+  return {
+    headers: headers,
+    rows: rows,
+    scannedRows: scanned,
+    readRows: readRows,
+    columns: width,
+    sheetColumns: lastColumn
+  };
+}
+
+function readHeaderAndRow_(sheet, rowNumber) {
+  var lastColumn = Math.max(sheet.getLastColumn(), 1);
+  var headers = trimRow_(sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0] || []);
+  var values = trimRow_(sheet.getRange(rowNumber, 1, 1, lastColumn).getDisplayValues()[0] || []);
+  return { headers: headers, row: { row: rowNumber, values: values } };
+}
+
+function leadsGeneration_() {
+  return PropertiesService.getScriptProperties().getProperty(LEADS_GEN_KEY) || '0';
+}
+
+function bumpLeadsCache_() {
+  var props = PropertiesService.getScriptProperties();
+  var next = String((parseInt(props.getProperty(LEADS_GEN_KEY), 10) || 0) + 1);
+  props.setProperty(LEADS_GEN_KEY, next);
+  try {
+    CacheService.getScriptCache().remove(LEADS_CACHE_KEY);
+  } catch (error) {}
+  return next;
+}
+
+function packLeadsCache_(gen, payload) {
+  var body = {
+    ok: payload.ok,
+    sheetId: payload.sheetId,
+    sheetTab: payload.sheetTab,
+    contactCutoff: payload.contactCutoff,
+    contactCutoffTimeZone: payload.contactCutoffTimeZone,
+    count: payload.count,
+    leads: payload.leads,
+    rowsOmitted: true,
+    scannedRows: payload.scannedRows,
+    readRows: payload.readRows,
+    readMs: payload.readMs,
+    sheetRead: payload.sheetRead,
+    columns: payload.columns,
+    sheetColumns: payload.sheetColumns
+  };
+  var pack = JSON.stringify({ gen: gen, at: new Date().getTime(), payload: body });
+  if (pack.length > 60000) return '';
+  return pack;
+}
+
+function loadLeadsPayload_(force) {
+  var gen = leadsGeneration_();
+  var cache = CacheService.getScriptCache();
+  if (!force) {
+    try {
+      var hit = cache.get(LEADS_CACHE_KEY);
+      if (hit) {
+        var parsed = JSON.parse(hit);
+        if (parsed && parsed.gen === gen && parsed.payload && parsed.payload.sheetRead === 'tail') {
+          parsed.payload.gasCache = 'hit';
+          parsed.payload.gasCacheAgeMs = new Date().getTime() - Number(parsed.at || 0);
+          parsed.payload.readMs = 0;
+          return parsed.payload;
+        }
+      }
+    } catch (error) {}
+  }
+
+  var started = new Date().getTime();
+  var table = readLeadsTable_(getLeadsSheet_());
+  var payload = tablePayload_(table);
+  payload.columns = table.columns || 0;
+  payload.sheetColumns = table.sheetColumns || 0;
+  payload.scannedRows = table.scannedRows || 0;
+  payload.readRows = table.readRows || 0;
+  payload.readMs = new Date().getTime() - started;
+  payload.sheetRead = 'tail';
+  payload.gasCache = 'miss';
+
+  if (leadsGeneration_() === gen) {
+    try {
+      var pack = packLeadsCache_(gen, payload);
+      if (pack) cache.put(LEADS_CACHE_KEY, pack, LEADS_CACHE_TTL_SEC);
+    } catch (error) {}
+  }
+  return payload;
 }
 
 function isFilled_(value) {
@@ -444,21 +632,31 @@ function buildLead_(headers, values, sheetRow) {
     isContacted: status !== 'new',
     source: raw.origem || '',
     sourceTab: SHEET_TAB,
+    doctor: raw.medico_orcamento || '',
+    appointmentDate: raw.data_primeira_consulta || '',
+    value: money_(raw.valor_real_bruto),
     formFields: formFields,
     crm: crm
   };
 }
 
+function money_(value) {
+  var text = String(value || '').replace(/€/g, '').replace(/\s/g, '');
+  if (!text) return 0;
+  if (text.indexOf(',') !== -1 && text.indexOf('.') !== -1) text = text.replace(/\./g, '').replace(',', '.');
+  else if (text.indexOf(',') !== -1) text = text.replace(',', '.');
+  var amount = Number(text);
+  return isFinite(amount) ? amount : 0;
+}
+
 function tablePayload_(table) {
   var leads = [];
-  var rows = [];
   table.rows.forEach(function (row) {
     var raw = rawFromRow_(table.headers, row.values);
     if (!passesContactCutoff_(raw)) return;
     var lead = buildLead_(table.headers, row.values, row.row);
     if (!lead) return;
     leads.push(lead);
-    rows.push(row);
   });
   return {
     ok: true,
@@ -467,9 +665,8 @@ function tablePayload_(table) {
     contactCutoff: CONTACT_CUTOFF_DAY,
     contactCutoffTimeZone: 'Europe/Lisbon',
     count: leads.length,
-    headers: table.headers,
-    rows: rows,
-    leads: leads
+    leads: leads,
+    rowsOmitted: true
   };
 }
 
@@ -595,19 +792,18 @@ function updateLead_(body) {
     applyFields_(sheet, rowNumber, fields);
     writeObservacoes_(sheet, rowNumber, status, body.note || '', noteSet, body.motivo || '', motivoSet, body.fecho || '', fechoSet, fechoClear);
     SpreadsheetApp.flush();
-    var table = readTable_(sheet);
-    var match = null;
-    for (var i = 0; i < table.rows.length; i += 1) {
-      if (table.rows[i].row === rowNumber) match = table.rows[i];
-    }
-    if (!match) throw new Error('Lead não encontrada');
+    try {
+      bumpLeadsCache_();
+    } catch (error) {}
+    var written = readHeaderAndRow_(sheet, rowNumber);
+    if (!written.row) throw new Error('Lead não encontrada');
     return {
       ok: true,
       sheetId: SHEET_ID,
       sheetTab: SHEET_TAB,
-      headers: table.headers,
-      row: match,
-      lead: buildLead_(table.headers, match.values, match.row)
+      headers: written.headers,
+      row: written.row,
+      lead: buildLead_(written.headers, written.row.values, written.row.row)
     };
   });
 }
@@ -644,16 +840,19 @@ function createLead_(body) {
     put('Comentários', 1, formatStatusNote_(body.notes || body.note || '', 'new'));
     sheet.appendRow(row);
     SpreadsheetApp.flush();
-    var table = readTable_(sheet);
-    var created = table.rows.length ? table.rows[table.rows.length - 1] : null;
-    if (!created) throw new Error('A folha não devolveu a lead criada');
+    try {
+      bumpLeadsCache_();
+    } catch (error) {}
+    var createdRow = sheet.getLastRow();
+    if (createdRow < 2) throw new Error('A folha não devolveu a lead criada');
+    var written = readHeaderAndRow_(sheet, createdRow);
     return {
       ok: true,
       sheetId: SHEET_ID,
       sheetTab: SHEET_TAB,
-      headers: table.headers,
-      row: created,
-      lead: buildLead_(table.headers, created.values, created.row)
+      headers: written.headers,
+      row: written.row,
+      lead: buildLead_(written.headers, written.row.values, written.row.row)
     };
   });
 }
@@ -684,8 +883,19 @@ function handle_(e) {
         contactCutoffTimeZone: 'Europe/Lisbon'
       });
     }
+    if (action === 'ping') {
+      return jsonResponse_({
+        ok: true,
+        pong: true,
+        sheetId: SHEET_ID,
+        sheetTab: SHEET_TAB,
+        contactCutoff: CONTACT_CUTOFF_DAY,
+        contactCutoffTimeZone: 'Europe/Lisbon'
+      });
+    }
     if (action === 'leads' || action === 'getLeads') {
-      return jsonResponse_(tablePayload_(readTable_(getLeadsSheet_())));
+      var forceSheet = String((e && e.parameter && e.parameter.fresh) || (body && body.fresh) || '') === '1';
+      return jsonResponse_(loadLeadsPayload_(forceSheet));
     }
     if (action === 'update' || action === 'updateLead') return jsonResponse_(updateLead_(body));
     if (action === 'create' || action === 'createLead') return jsonResponse_(createLead_(body));

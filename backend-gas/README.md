@@ -60,7 +60,11 @@ Reinicie o serviço. `GET /api/health` deve mostrar `"storage":"apps-script","co
 
 `GET /exec?secret=…&action=leads`
 
-Devolve JSON com `leads` (objectos com `id` = número da linha, `nome`, `telefone`, `email`, `dataContacto`, `formFields` das colunas preenchidas com o rótulo em português, e `crm`) e também `headers` + `rows` para o Mini normalizar.
+Devolve JSON com `leads` (objectos com `id` = número da linha, `nome`, `telefone`, `email`, `dataContacto`, `contactDay`, `doctor`, `appointmentDate`, `value`, `formFields` e `crm`) e `rowsOmitted: true`. A lista não traz `headers` nem `rows`. O Mini mapeia `leads`. Uma resposta antiga, com `leads: []` mais `headers` e `rows`, continua a ser lida.
+
+A lista não lê a grelha toda. Lê a coluna do timestamp e depois só as colunas mapeadas das linhas em ou depois de `2026-09-01` (`sheetRead: "tail"`, `columns`, `sheetColumns`, `scannedRows`, `readRows`, `readMs`). `CacheService` guarda esse JSON **60 segundos**. Sem `fresh=1` um hit não abre a folha — é o que o Actualizar pede. `fresh=1` ignora a cache (medição). O ping do Mini não enche a cache. `update`, `create` e um `sync` que inseriu linhas chamam `bumpLeadsCache_`. `update` e `create` devolvem `headers`, `row` e `lead`.
+
+`GET /exec?secret=…&action=ping` responde sem abrir a folha. Serve para o Mini manter o `/exec` quente.
 
 `POST /exec?secret=…` com JSON:
 
@@ -107,7 +111,7 @@ Depois de colar este `Code.gs`: **Implementar → Gerir implementações → lá
 
 `action=leads` omite linhas anteriores a 2026-09-01. `action=update` grava o id pedido na mesma.
 
-`action=sync` corre `syncDanielToEvob` (Daniel → EVOB, mesmas regras de corte). Não muda `leads`, `update`, `create` nem `health`.
+`action=sync` corre `syncDanielToEvob` (Daniel → EVOB, mesmas regras de corte). Não muda o corte de `leads`, `update`, `create`, `health` nem `ping`. Se inseriu linhas, invalida a cache da lista.
 
 ## 5. Sync Daniel → EVOB
 
