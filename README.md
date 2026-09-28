@@ -16,7 +16,7 @@ A Google Sheet continua a ser a única fonte de verdade. `data/leads.json` não 
 
 `GET /api/leads` guarda a última lista boa em memória durante **45s** (`LEADS_CACHE_TTL_MS`; no Mini, 30–60s) e, em paralelo, em `data/leads-cache.json`. Esse ficheiro só acelera o arranque: não se restaura como base e pode apagar-se. Se a cache está dentro do TTL, a resposta sai logo (`X-Leads-Cache: hit`). Se está velha, a resposta sai logo com esses dados (`stale`) e o Mini pede a folha em fundo. Só sem cache nenhuma (arranque a frio) o pedido espera pelo Apps Script (`miss`). A segunda chamada com a cache quente fica abaixo de 1s. `GET /api/leads?fresh=1` espera pela revalidação que já está a correr e, dentro do TTL, continua a ser um `hit`.
 
-`POST /api/leads/refresh` apaga a cache do Mini (memória e `data/leads-cache.json`) e volta a ler a folha, mesmo dentro do TTL. A resposta traz a lista e `X-Leads-Cache: refresh`. No cabeçalho, **Atualizar** chama esse caminho. Enquanto corre, o botão fica desactivado com «A atualizar…». Se a folha falhar, aparece o aviso já usado na app. A lista no browser (`gosmile-leads-swr-v1`) só é substituída pela resposta nova. Etiqueta sugerida: `MacMini-leads-refresh-v1`.
+`POST /api/leads/refresh` relê a folha mesmo dentro do TTL e responde com a lista e `X-Leads-Cache: refresh`. Não apaga a cache antes do pedido: se já houver uma leitura da folha a correr, espera por essa (uma ida ao Apps Script, não duas) e depois substitui a memória. `data/leads-cache.json` grava-se depois da resposta. Se a folha falhar, a lista anterior mantém-se. No cabeçalho o controlo é um ícone de setas circulares (`aria-label="Atualizar"`), desactivado e a rodar enquanto o pedido vai; esse estado pinta-se no toque, antes do `await`. A lista no browser (`gosmile-leads-swr-v1`) escreve-se depois do paint. O tempo que resta é o Apps Script: `action=leads` lê a aba inteira com `getDisplayValues` e devolve as linhas cruas e as leads já montadas (o Mini só usa as linhas), mais o arranque a frio do `/exec`. Este repo não encurta esse salto nem muda o corte `2026-09-01`. Etiqueta sugerida: `MacMini-leads-refresh-v2`.
 
 No browser, a última lista boa fica em `localStorage` (`gosmile-leads-swr-v1`). Ao abrir, a inbox mostra essa lista e «A atualizar…». «Nenhuma lead na inbox.» só aparece depois de uma leitura concluída com zero leads.
 
@@ -85,7 +85,7 @@ O servidor Express serve `dist/` e `/api` na mesma porta. Ver [DEPLOY.md](./DEPL
 | GET | `/api/health` | Estado. `storage` é `apps-script`; `configured` diz se o Mini tem URL e segredo |
 | GET | `/api/leads` | Leads da aba Leads (2024 - 2026) com data de contacto >= 2026-09-01. Cache curta no Mini (memória + `data/leads-cache.json`); `?fresh=1` espera a revalidação |
 | POST | `/api/leads/sync` | Corre `action=sync` no Apps Script (Daniel → EVOB) e apaga a cache da lista. O segredo fica no Mini |
-| POST | `/api/leads/refresh` | Apaga a cache do Mini, relê a folha e responde `X-Leads-Cache: refresh` |
+| POST | `/api/leads/refresh` | Relê a folha (junta-se a uma leitura já em curso) e responde `X-Leads-Cache: refresh` |
 | POST | `/api/sync/inbound-meta` | Já não importa CSV nem JSON. Devolve a contagem actual da folha |
 | POST | `/api/leads` | Acrescenta uma linha (nome, telefone, email, notas) |
 | GET | `/api/leads/:id` | Lê uma lead (`id` = número da linha) |

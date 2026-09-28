@@ -319,9 +319,14 @@ export async function listInboundLeads(options = {}) {
   if (!cfg.configured) return { leads: [], configured: false, cache: 'unconfigured' };
 
   const { fresh = false, bypassCache = false, ...gasOptions } = options;
-  if (bypassCache) await clearLeadsListCache();
 
-  await hydrateFromDisk();
+  // A forced refresh must not wipe memory or the cache file first. Wiping
+  // waits on the disk queue and forgets an in-flight sheet read while that
+  // call is still on the gas queue, so the next read waits for it and then
+  // starts a second one. revalidate() joins the flight already in progress.
+  // The file is replaced after the response; a failed read leaves the
+  // previous list in place.
+  if (!bypassCache) await hydrateFromDisk();
   const hadCache = Boolean(listCache && Array.isArray(listCache.leads));
 
   if (!bypassCache && hadCache && isFresh(listCache)) {
