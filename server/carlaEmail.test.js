@@ -151,7 +151,8 @@ test('PATCH scheduled with a date asks Apps Script to email Carla once', async (
     assert.equal(posts.length, 1);
     assert.equal(posts[0].carlaEmail.to, 'geral@gosmile.pt');
     assert.equal(posts[0].carlaEmail.subject, 'ALERTA · Nova 1ª consulta — Ida Cristina — 22/09/2026');
-    assert.doesNotMatch(posts[0].carlaEmail.html, /Olá|Obrigado|Carla, nova marcação/);
+    assert.match(posts[0].carlaEmail.html, /Acção:/);
+    assert.doesNotMatch(posts[0].carlaEmail.html, /Olá|Obrigado|por favor|abraço|Carla, nova marcação/);
     assert.match(posts[0].carlaEmail.html, /Ida Cristina/);
     assert.match(posts[0].carlaEmail.html, /22\/09\/2026 · 10:00/);
     assert.match(posts[0].carlaEmail.html, /Bruno Aires/);
