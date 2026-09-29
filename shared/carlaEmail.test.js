@@ -24,7 +24,8 @@ test('Lisbon date and time split keeps a wall-clock datetime-local and converts 
 test('HTML fill uses the locked Carla template and escapes values', () => {
   const template = readFileSync(new URL('../templates/email-carla-marcacao.html', import.meta.url), 'utf8');
   assert.match(template, /ALERTA · Nova 1ª consulta/);
-  assert.match(template, /<strong style="font-weight:700;">Acção:<\/strong> meter na agenda · confirmar com o paciente no dia anterior\./);
+  assert.match(template, /<strong style="font-weight:700;">Acção:<\/strong> Agendar o paciente · confirmar a ida com o paciente no dia anterior\./);
+  assert.doesNotMatch(template, /meter na agenda/i);
   assert.match(template, /Automático · Leads · leads\.evob\.org/);
   assert.ok(template.indexOf('Acção:') < template.indexOf('<strong>Nome:</strong>'));
   assert.doesNotMatch(template, /Olá|Obrigado|por favor|abraço|Carla, nova marcação/);
@@ -53,7 +54,8 @@ test('HTML fill uses the locked Carla template and escapes values', () => {
   assert.match(message.html, /22\/09\/2026 · 10:00/);
   assert.match(message.html, /Bruno Aires/);
   assert.match(message.html, /META/);
-  assert.match(message.html, /Acção:.*meter na agenda · confirmar com o paciente no dia anterior\./);
+  assert.match(message.html, /Agendar o paciente · confirmar a ida com o paciente no dia anterior\./);
+  assert.doesNotMatch(message.html, /meter na agenda/i);
   assert.ok(message.html.indexOf('Acção:') < message.html.indexOf('Ana &lt;Silva&gt;'));
   assert.equal(fillCarlaTemplate('{{nome}}', { nome: 'A & B' }), 'A &amp; B');
 });
