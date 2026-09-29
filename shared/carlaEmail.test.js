@@ -23,9 +23,10 @@ test('Lisbon date and time split keeps a wall-clock datetime-local and converts 
 
 test('HTML fill uses the locked Carla template and escapes values', () => {
   const template = readFileSync(new URL('../templates/email-carla-marcacao.html', import.meta.url), 'utf8');
-  assert.match(template, /Nova marcação 1ª consulta/);
-  assert.match(template, /Carla, nova marcação de 1ª consulta\./);
+  assert.match(template, /ALERTA · Nova 1ª consulta/);
+  assert.match(template, /<strong>Nome:<\/strong> \{\{nome\}\}/);
   assert.match(template, /Meter o paciente na agenda e confirmar a ida com o paciente no dia anterior\./);
+  assert.doesNotMatch(template, /Olá|Obrigado|Carla, nova marcação/);
   assert.match(template, /background-color:#e0c8a8/);
   assert.match(template, /background-color:#fff7ed/);
   assert.doesNotMatch(template, /background:/);
@@ -42,7 +43,8 @@ test('HTML fill uses the locked Carla template and escapes values', () => {
     template
   );
   assert.equal(message.to, CARLA_EMAIL_TO);
-  assert.equal(message.subject, 'Nova marcação 1ª consulta — Ana <Silva> — 22/09/2026');
+  assert.equal(message.subject, 'ALERTA · Nova 1ª consulta — Ana <Silva> — 22/09/2026');
+  assert.doesNotMatch(message.html, /Olá|Obrigado|Carla, nova marcação/);
   assert.equal(message.html.includes('{{'), false);
   assert.match(message.html, /Ana &lt;Silva&gt;/);
   assert.match(message.html, /351910000000/);

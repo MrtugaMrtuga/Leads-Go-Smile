@@ -125,7 +125,7 @@ export function buildCarlaEmail(lead, template = loadCarlaTemplate()) {
   };
   return {
     to: CARLA_EMAIL_TO,
-    subject: `Nova marcação 1ª consulta — ${nome} — ${data}`,
+    subject: `ALERTA · Nova 1ª consulta — ${nome} — ${data}`,
     html: fillCarlaTemplate(template, vars),
     vars,
   };
