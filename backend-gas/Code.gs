@@ -22,6 +22,10 @@
  * bumpLeadsCache_. action=ping não lê a folha.
  * action=sync corre syncDanielToEvob e não muda o corte nem as outras ações.
  *
+ * Marcação com data: se o Mini manda carlaEmail no update, MailApp envia
+ * uma vez para geral@gosmile.pt (conta que corre o script, evobtob) e grava
+ * [carla-email:sent] em Comentários. Sem projecto Cloud nem segredo novo.
+ *
  * Segredo: propriedade do script APPS_SCRIPT_SECRET, igual à env do Mini.
  * O mapeamento de colunas espelha shared/inboundMeta.js.
  */
@@ -54,6 +58,8 @@ var COLUMN_DEFS = [
 var STATUS_NOTE = /^\[status:(new|contacted|processing|discarded|scheduled|positive|completed|paid)\]\s*/i;
 var MOTIVO_NOTE = /^\[motivo:([^\]]*)\]\s*/i;
 var FECHO_NOTE = /^\[fecho:([^\]]*)\]\s*/i;
+var CARLA_EMAIL_NOTE = /^\[carla-email:sent\]\s*/i;
+var CARLA_EMAIL_TO = 'geral@gosmile.pt';
 
 function jsonResponse_(payload) {
   return ContentService.createTextOutput(JSON.stringify(payload)).setMimeType(ContentService.MimeType.JSON);
@@ -86,7 +92,8 @@ function splitStatusNote_(value) {
   var status = '';
   var motivo = '';
   var fecho = '';
-  for (var guard = 0; guard < 8; guard += 1) {
+  var carlaEmailSent = false;
+  for (var guard = 0; guard < 12; guard += 1) {
     var statusMatch = text.match(STATUS_NOTE);
     if (statusMatch) {
       status = String(statusMatch[1]).toLowerCase();
@@ -105,27 +112,35 @@ function splitStatusNote_(value) {
       text = text.slice(fechoMatch[0].length).trim();
       continue;
     }
+    var carlaMatch = text.match(CARLA_EMAIL_NOTE);
+    if (carlaMatch) {
+      carlaEmailSent = true;
+      text = text.slice(carlaMatch[0].length).trim();
+      continue;
+    }
     break;
   }
-  return { status: status, motivo: motivo, fecho: fecho, note: text };
+  return { status: status, motivo: motivo, fecho: fecho, carlaEmailSent: carlaEmailSent, note: text };
 }
 
-function formatStatusNote_(note, status, motivo, fecho) {
+function formatStatusNote_(note, status, motivo, fecho, carlaEmailSent) {
   var parsed = splitStatusNote_(note);
   var clean = parsed.note;
   var normalized = String(status || '').trim().toLowerCase();
   var allowed = { new: 1, contacted: 1, processing: 1, discarded: 1, scheduled: 1, positive: 1, completed: 1, paid: 1 };
   var reason = cleanMotivo_(motivo === undefined ? parsed.motivo : motivo);
   var closed = fecho === undefined ? parsed.fecho : cleanFecho_(fecho);
+  var sent = carlaEmailSent === undefined ? parsed.carlaEmailSent : Boolean(carlaEmailSent);
   var lines = [];
   if (allowed[normalized]) lines.push('[status:' + normalized + ']');
   if (reason) lines.push('[motivo:' + reason + ']');
   if (closed) lines.push('[fecho:' + closed + ']');
+  if (sent) lines.push('[carla-email:sent]');
   if (!lines.length) return clean;
   return clean ? lines.join('\n') + '\n' + clean : lines.join('\n');
 }
 
-function mergeObservacoes_(currentCell, status, note, noteSet, motivo, motivoSet, fecho, fechoSet, fechoClear) {
+function mergeObservacoes_(currentCell, status, note, noteSet, motivo, motivoSet, fecho, fechoSet, fechoClear, carlaSent, carlaSentSet) {
   var parsed = splitStatusNote_(currentCell);
   var incoming = splitStatusNote_(note);
   var nextNote = noteSet ? incoming.note : parsed.note;
@@ -134,7 +149,8 @@ function mergeObservacoes_(currentCell, status, note, noteSet, motivo, motivoSet
   var nextFecho = parsed.fecho || incoming.fecho || '';
   if (fechoClear) nextFecho = '';
   else if (fechoSet) nextFecho = parsed.fecho || cleanFecho_(fecho);
-  return formatStatusNote_(nextNote, nextStatus, nextMotivo, nextFecho);
+  var nextCarla = carlaSentSet ? Boolean(carlaSent) : Boolean(parsed.carlaEmailSent || incoming.carlaEmailSent);
+  return formatStatusNote_(nextNote, nextStatus, nextMotivo, nextFecho, nextCarla);
 }
 
 function statusFromLegenda_(value) {
@@ -626,6 +642,7 @@ function buildLead_(headers, values, sheetRow) {
     phone: raw.telefone || '',
     timestamp: contactText,
     notes: primary.note || '',
+    carlaEmailSent: Boolean(primary.carlaEmailSent),
     status: status,
     discardReason: primary.motivo || '',
     closedAt: raw.data_fecho || primary.fecho || '',
@@ -768,6 +785,50 @@ function withLock_(fn) {
   }
 }
 
+function stampCarlaSent_(sheet, rowNumber) {
+  var lastColumn = Math.max(sheet.getLastColumn(), 1);
+  var headers = trimRow_(sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0]);
+  var column = findNotesColumn_(indexHeaders_(headers));
+  if (!column) return '';
+  var cell = sheet.getRange(rowNumber, column.index + 1);
+  var next = mergeObservacoes_(cell.getDisplayValue(), '', '', false, '', false, '', false, false, true, true);
+  cell.setValue(next);
+  return next;
+}
+
+function sendCarlaEmail_(message) {
+  var subject = String(message && message.subject || '').replace(/[\r\n]+/g, ' ').trim();
+  var html = String(message && message.html || '');
+  if (!subject || !html) throw new Error('Email da Carla incompleto');
+  MailApp.sendEmail({
+    to: CARLA_EMAIL_TO,
+    subject: subject,
+    htmlBody: html,
+    name: 'GoSmile Leads'
+  });
+}
+
+function maybeSendCarlaEmail_(sheet, rowNumber, body, notesCell) {
+  var message = body && body.carlaEmail;
+  if (!message || typeof message !== 'object') return { state: 'skipped' };
+  if (splitStatusNote_(notesCell).carlaEmailSent) return { state: 'skipped' };
+  var written = readHeaderAndRow_(sheet, rowNumber);
+  var lead = written.row ? buildLead_(written.headers, written.row.values, written.row.row) : null;
+  if (!lead || lead.status !== 'scheduled' || !String(lead.appointmentDate || '').trim()) return { state: 'skipped' };
+  try {
+    sendCarlaEmail_(message);
+  } catch (error) {
+    return { state: 'failed', error: String(error && error.message || error) };
+  }
+  stampCarlaSent_(sheet, rowNumber);
+  return { state: 'sent' };
+}
+
+/** Run once in the editor (as evobtob) so Google asks for the MailApp permission. */
+function authorizeCarlaMail() {
+  MailApp.getRemainingDailyQuota();
+}
+
 function updateLead_(body) {
   var rowNumber = Number(body.id || body.row || body.row_number);
   if (!rowNumber || rowNumber < 2) throw new Error('Lead não encontrada');
@@ -789,8 +850,10 @@ function updateLead_(body) {
       ensureHeader_(sheet, 'Data fecho');
       fields = stampFechoField_(fields, kept, fechoClear || !kept);
     }
+    var notesBefore = currentObservacoes_(sheet, rowNumber);
     applyFields_(sheet, rowNumber, fields);
-    writeObservacoes_(sheet, rowNumber, status, body.note || '', noteSet, body.motivo || '', motivoSet, body.fecho || '', fechoSet, fechoClear);
+    var notesWritten = writeObservacoes_(sheet, rowNumber, status, body.note || '', noteSet, body.motivo || '', motivoSet, body.fecho || '', fechoSet, fechoClear);
+    var carla = maybeSendCarlaEmail_(sheet, rowNumber, body, notesWritten == null ? notesBefore : notesWritten);
     SpreadsheetApp.flush();
     try {
       bumpLeadsCache_();
@@ -803,7 +866,9 @@ function updateLead_(body) {
       sheetTab: SHEET_TAB,
       headers: written.headers,
       row: written.row,
-      lead: buildLead_(written.headers, written.row.values, written.row.row)
+      lead: buildLead_(written.headers, written.row.values, written.row.row),
+      carlaEmail: carla.state,
+      carlaEmailError: carla.error || ''
     };
   });
 }

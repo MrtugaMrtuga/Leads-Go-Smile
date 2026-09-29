@@ -6,6 +6,7 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { buildCarlaEmail, projectLead, shouldNotifyCarla } from '../shared/carlaEmail.js';
 import { SHEET_TAB, filterLeadsForApp, leadFromSheetRow, mapDataToLeads } from '../shared/inboundMeta.js';
 import { leadPatchToFields, PipelineError } from '../shared/sheetWrite.js';
 
@@ -495,6 +496,16 @@ export async function getInboundLead(id, options = {}) {
   return leads.find((lead) => String(lead.id) === String(id)) || null;
 }
 
+async function loadPreviousLead(id, options) {
+  try {
+    const { leads } = await listInboundLeads({ env: options.env, fetchImpl: options.fetchImpl });
+    return leads.find((lead) => String(lead.id) === String(id)) || null;
+  } catch (error) {
+    console.error('carla previous', error?.message || error);
+    return null;
+  }
+}
+
 export async function updateInboundLead(id, updates, options = {}) {
   const cfg = appsScriptConfig(options.env);
   if (!cfg.configured) throw new SheetError('Apps Script não configurado', 503);
@@ -508,23 +519,34 @@ export async function updateInboundLead(id, updates, options = {}) {
   if (!patch.fields.length && !patch.noteSet && !patch.status && !patch.motivoSet && !patch.fechoSet) {
     throw new SheetError('Nada para actualizar', 400);
   }
+  const previous = options.previous !== undefined ? options.previous : await loadPreviousLead(id, options);
+  const projected = projectLead(previous, updates);
+  let carlaEmail;
+  if (options.carlaEmail !== undefined) carlaEmail = options.carlaEmail;
+  else if (shouldNotifyCarla(previous, projected)) carlaEmail = buildCarlaEmail(projected);
+  const body = {
+    id: String(id),
+    status: patch.status,
+    note: patch.note,
+    noteSet: patch.noteSet,
+    motivo: patch.motivo,
+    motivoSet: patch.motivoSet,
+    fecho: patch.fecho,
+    fechoSet: patch.fechoSet,
+    fechoClear: patch.fechoClear,
+    fields: patch.fields,
+  };
+  if (carlaEmail) {
+    body.carlaEmail = { to: carlaEmail.to, subject: carlaEmail.subject, html: carlaEmail.html };
+  }
   const payload = await gasRequest({
+    ...options,
     action: 'update',
     method: 'POST',
-    body: {
-      id: String(id),
-      status: patch.status,
-      note: patch.note,
-      noteSet: patch.noteSet,
-      motivo: patch.motivo,
-      motivoSet: patch.motivoSet,
-      fecho: patch.fecho,
-      fechoSet: patch.fechoSet,
-      fechoClear: patch.fechoClear,
-      fields: patch.fields,
-    },
-    ...options,
+    body,
   });
+  if (payload?.carlaEmail === 'failed') console.error('carla email', payload.carlaEmailError || 'failed');
+  else if (payload?.carlaEmail === 'sent') console.log('carla email sent', id);
   const lead = leadFromPayload(payload);
   if (!lead) throw new SheetError('Lead não encontrada', 404);
   return lead;

@@ -135,6 +135,17 @@ npm run build
 launchctl kickstart -k gui/$(id -u)/org.evault.leads
 ```
 
+### Email à Carla (`MacMini-leads-carla-email-v1`)
+
+Não há variável nova nem chave Gmail. O correio sai do Apps Script (`MailApp`, conta evobtob) para `geral@gosmile.pt`.
+
+1. Cole [`backend-gas/Code.gs`](./backend-gas/Code.gs) no projecto já ligado à folha.
+2. Corra `authorizeCarlaMail` uma vez no editor (não envia email) e aceite a permissão.
+3. **Implementar → Gerir implementações → Nova versão** do `/exec`.
+4. No Mini: `git pull`, `npm ci`, `npm run build`, e o `launchctl kickstart` de cima.
+
+Sem a versão nova, a marcação grava na folha e o email não sai.
+
 ## Porta
 
 A porta por omissão é **3040** (`PORT`). Mantenha-a estável para o reverse proxy e para o Vite em desenvolvimento (`/api` → `127.0.0.1:3040`).

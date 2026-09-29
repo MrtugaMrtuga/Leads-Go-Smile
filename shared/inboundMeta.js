@@ -67,6 +67,7 @@ const LEAD_STATUSES = ['new', 'contacted', 'processing', 'discarded', 'scheduled
 const STATUS_NOTE = /^\[status:(new|contacted|processing|discarded|scheduled|positive|completed|paid)\]\s*/i;
 const MOTIVO_NOTE = /^\[motivo:([^\]]*)\]\s*/i;
 const FECHO_NOTE = /^\[fecho:([^\]]*)\]\s*/i;
+const CARLA_EMAIL_NOTE = /^\[carla-email:sent\]\s*/i;
 
 const OTHER_STATUS_LABELS = {
   new: 'Novas',
@@ -93,7 +94,8 @@ export function splitStatusNote(value) {
   let status = '';
   let motivo = '';
   let fecho = '';
-  for (let guard = 0; guard < 8; guard += 1) {
+  let carlaEmailSent = false;
+  for (let guard = 0; guard < 12; guard += 1) {
     const statusMatch = text.match(STATUS_NOTE);
     if (statusMatch) {
       status = statusMatch[1].toLowerCase();
@@ -112,28 +114,47 @@ export function splitStatusNote(value) {
       text = text.slice(fechoMatch[0].length).trim();
       continue;
     }
+    const carlaMatch = text.match(CARLA_EMAIL_NOTE);
+    if (carlaMatch) {
+      carlaEmailSent = true;
+      text = text.slice(carlaMatch[0].length).trim();
+      continue;
+    }
     break;
   }
-  return { status, motivo, fecho, note: text };
+  return { status, motivo, fecho, carlaEmailSent, note: text };
 }
 
-export function formatStatusNote(note, status, motivo, fecho) {
+export function formatStatusNote(note, status, motivo, fecho, carlaEmailSent) {
   const parsed = splitStatusNote(note);
   const clean = parsed.note;
   const normalized = String(status || '').trim().toLowerCase();
   const reason = cleanMotivo(motivo === undefined ? parsed.motivo : motivo);
   const closed = fecho === undefined ? parsed.fecho : cleanFecho(fecho);
+  const sent = carlaEmailSent === undefined ? parsed.carlaEmailSent : Boolean(carlaEmailSent);
   const lines = [];
   if (LEAD_STATUSES.includes(normalized)) lines.push(`[status:${normalized}]`);
   if (reason) lines.push(`[motivo:${reason}]`);
   if (closed) lines.push(`[fecho:${closed}]`);
+  if (sent) lines.push('[carla-email:sent]');
   if (!lines.length) return clean;
   return clean ? `${lines.join('\n')}\n${clean}` : lines.join('\n');
 }
 
 export function mergeObservacoes(
   currentCell,
-  { status = '', note = '', noteSet = false, motivo = '', motivoSet = false, fecho = '', fechoSet = false, fechoClear = false } = {}
+  {
+    status = '',
+    note = '',
+    noteSet = false,
+    motivo = '',
+    motivoSet = false,
+    fecho = '',
+    fechoSet = false,
+    fechoClear = false,
+    carlaSent = false,
+    carlaSentSet = false,
+  } = {}
 ) {
   const parsed = splitStatusNote(currentCell);
   const incoming = splitStatusNote(note);
@@ -143,7 +164,8 @@ export function mergeObservacoes(
   let nextFecho = parsed.fecho || incoming.fecho || '';
   if (fechoClear) nextFecho = '';
   else if (fechoSet) nextFecho = parsed.fecho || cleanFecho(fecho);
-  return formatStatusNote(nextNote, nextStatus, nextMotivo, nextFecho);
+  const nextCarla = carlaSentSet ? Boolean(carlaSent) : Boolean(parsed.carlaEmailSent || incoming.carlaEmailSent);
+  return formatStatusNote(nextNote, nextStatus, nextMotivo, nextFecho, nextCarla);
 }
 
 /** Legenda values the UI filters on. Empty means a new lead with no pipeline colour. */
@@ -776,6 +798,7 @@ function mapRow(indexed, cells, sheetRow) {
 
   const status = inferInboundStatus(raw);
   const notes = primary.note || '';
+  const carlaEmailSent = Boolean(primary.carlaEmailSent);
   const crm = {};
   CRM_KEYS.forEach((key) => {
     crm[key] = key === 'observacoes' ? primary.note : raw[key] || '';
@@ -803,6 +826,7 @@ function mapRow(indexed, cells, sheetRow) {
     discardReason,
     closedAt,
     notes,
+    carlaEmailSent,
     doctor: raw.medico_orcamento || '',
     appointmentDate: raw.data_primeira_consulta || '',
     value: parseMoney(raw.valor_real_bruto),
@@ -858,6 +882,10 @@ function normalizeStoredLead(item, index) {
     closedAt: item.closedAt ? String(item.closedAt) : '',
     source: item.source || item.Origem || '',
     sourceTab: item.sourceTab || '',
+    notes: item.notes ? String(item.notes) : '',
+    doctor: item.doctor ? String(item.doctor) : '',
+    appointmentDate: item.appointmentDate ? String(item.appointmentDate) : '',
+    carlaEmailSent: Boolean(item.carlaEmailSent),
   };
 
   if (formFields.length) lead.formFields = formFields;
