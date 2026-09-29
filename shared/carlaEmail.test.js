@@ -58,6 +58,64 @@ test('HTML fill uses the locked Carla template and escapes values', () => {
   assert.doesNotMatch(message.html, /meter na agenda/i);
   assert.ok(message.html.indexOf('Acção:') < message.html.indexOf('Ana &lt;Silva&gt;'));
   assert.equal(fillCarlaTemplate('{{nome}}', { nome: 'A & B' }), 'A &amp; B');
+  assert.doesNotMatch(message.html, /Notas:/);
+});
+
+test('Vanessa notes are a field, and a blank note omits the Notas line', () => {
+  const template = readFileSync(new URL('../templates/email-carla-marcacao.html', import.meta.url), 'utf8');
+  const withNotes = buildCarlaEmail(
+    {
+      name: 'Manuel Cunha',
+      phone: '351910000000',
+      email: 'manuel@example.com',
+      appointmentDate: '2026-09-22T18:30',
+      doctor: 'Bruno Aires',
+      source: 'META',
+      notes: 'Ligar seg depois das 18:30',
+    },
+    template
+  );
+  assert.equal(withNotes.subject, 'ALERTA · Nova 1ª consulta — Manuel Cunha — 22/09/2026');
+  assert.match(withNotes.html, /Agendar o paciente · confirmar a ida com o paciente no dia anterior\./);
+  assert.match(withNotes.html, /<strong>Notas:<\/strong> Ligar seg depois das 18:30/);
+  assert.ok(withNotes.html.indexOf('<strong>Origem:</strong>') < withNotes.html.indexOf('<strong>Notas:</strong>'));
+  assert.doesNotMatch(withNotes.html, /meter na agenda/i);
+
+  const blank = buildCarlaEmail(
+    {
+      name: 'Manuel Cunha',
+      appointmentDate: '2026-09-22T18:30',
+      notes: '   ',
+    },
+    template
+  );
+  assert.doesNotMatch(blank.html, /Notas:/);
+  assert.doesNotMatch(blank.html, /\{\{notas\}\}/);
+  assert.equal(blank.html.includes('{{'), false);
+
+  const marked = buildCarlaEmail(
+    {
+      name: 'Manuel Cunha',
+      appointmentDate: '2026-09-22T18:30',
+      notes: '[status:scheduled]\n[carla-email:sent]\nLigar seg depois das 18:30',
+    },
+    template
+  );
+  assert.match(marked.html, /<strong>Notas:<\/strong> Ligar seg depois das 18:30/);
+  assert.doesNotMatch(marked.html, /carla-email|\[status:/);
+
+  const escaped = buildCarlaEmail(
+    { name: 'Manuel Cunha', appointmentDate: '2026-09-22T18:30', notes: 'A & B <c>' },
+    template
+  );
+  assert.match(escaped.html, /<strong>Notas:<\/strong> A &amp; B &lt;c&gt;/);
+
+  const kept = projectLead(
+    { name: 'Manuel Cunha', status: 'processing', notes: 'Ligar seg depois das 18:30', carlaEmailSent: false },
+    { status: 'scheduled', appointmentDate: '2026-09-22T18:30', notes: '' }
+  );
+  assert.equal(kept.notes, 'Ligar seg depois das 18:30');
+  assert.match(buildCarlaEmail(kept, template).html, /<strong>Notas:<\/strong> Ligar seg depois das 18:30/);
 });
 
 test('Carla mail fires once when scheduled with a date, and not without one', () => {

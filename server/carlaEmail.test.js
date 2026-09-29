@@ -158,6 +158,7 @@ test('PATCH scheduled with a date asks Apps Script to email Carla once', async (
     assert.match(posts[0].carlaEmail.html, /22\/09\/2026 · 10:00/);
     assert.match(posts[0].carlaEmail.html, /Bruno Aires/);
     assert.match(posts[0].carlaEmail.html, /Meta/);
+    assert.doesNotMatch(posts[0].carlaEmail.html, /Notas:/);
     assert.equal(posts[0].carlaEmail.html.includes('{{'), false);
 
     const second = await call(app, 'PATCH', '/api/leads/2', {
@@ -187,13 +188,21 @@ test('PATCH scheduled without a date does not email Carla', async () => {
 test('a date added to an already scheduled lead emails once, and a sent lead does not', async () => {
   await clearLeadsListCache();
   const app = createApp();
-  await withSheet({ status: 'scheduled', estado: 'Marcada', appointmentDate: '' }, async (posts) => {
-    const dated = await call(app, 'PATCH', '/api/leads/2', { appointmentDate: '2026-09-22T16:00' });
-    assert.equal(dated.status, 200);
-    assert.equal(posts[0].carlaEmail.to, 'geral@gosmile.pt');
-    assert.match(posts[0].carlaEmail.subject, /22\/09\/2026$/);
-    assert.match(posts[0].carlaEmail.html, /16:00/);
-  });
+  await withSheet(
+    { status: 'scheduled', estado: 'Marcada', appointmentDate: '', note: 'Ligar seg depois das 18:30' },
+    async (posts) => {
+      const dated = await call(app, 'PATCH', '/api/leads/2', {
+        appointmentDate: '2026-09-22T16:00',
+        notes: '',
+      });
+      assert.equal(dated.status, 200);
+      assert.equal(posts[0].carlaEmail.to, 'geral@gosmile.pt');
+      assert.match(posts[0].carlaEmail.subject, /22\/09\/2026$/);
+      assert.match(posts[0].carlaEmail.html, /16:00/);
+      assert.match(posts[0].carlaEmail.html, /<strong>Notas:<\/strong> Ligar seg depois das 18:30/);
+      assert.doesNotMatch(posts[0].carlaEmail.html, /meter na agenda/i);
+    }
+  );
 
   await clearLeadsListCache();
   await withSheet(

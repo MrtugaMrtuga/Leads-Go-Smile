@@ -89,7 +89,17 @@ export function splitAppointmentDate(value) {
   return { data: text, hora: '' };
 }
 
+function notesHtml(value) {
+  return escapeHtml(String(value ?? '').replace(/\r\n/g, '\n').trim()).replace(/\n/g, '<br>');
+}
+
 export function fillCarlaTemplate(template, vars = {}) {
+  const notas = notesHtml(vars.notas);
+  let html = String(template ?? '');
+  if (!notas) {
+    html = html.replace(/<br>\s*<strong>Notas:<\/strong>\s*\{\{notas\}\}/gi, '');
+    html = html.replace(/\s*<strong>Notas:<\/strong>\s*\{\{notas\}\}(?:<br\s*\/?>)?/gi, '');
+  }
   const safe = {
     nome: escapeHtml(vars.nome ?? ''),
     telefone: escapeHtml(vars.telefone ?? ''),
@@ -98,9 +108,10 @@ export function fillCarlaTemplate(template, vars = {}) {
     hora: escapeHtml(vars.hora ?? ''),
     medico: escapeHtml(vars.medico ?? ''),
     origem: escapeHtml(vars.origem ?? ''),
+    notas,
   };
-  return String(template ?? '').replace(
-    /\{\{(nome|telefone|email|data|hora|medico|origem)\}\}/g,
+  return html.replace(
+    /\{\{(nome|telefone|email|data|hora|medico|origem|notas)\}\}/g,
     (_, key) => safe[key]
   );
 }
@@ -122,6 +133,7 @@ export function buildCarlaEmail(lead, template = loadCarlaTemplate()) {
     hora,
     medico: plain(lead?.doctor || lead?.medico),
     origem: plain(lead?.source || lead?.origem),
+    notas: splitStatusNote(lead?.notes).note,
   };
   return {
     to: CARLA_EMAIL_TO,
@@ -157,7 +169,10 @@ export function projectLead(previous, updates = {}) {
   if (updates.email !== undefined) next.email = updates.email;
   if (updates.doctor !== undefined) next.doctor = updates.doctor;
   if (updates.source !== undefined) next.source = updates.source;
-  if (updates.notes !== undefined) next.notes = splitStatusNote(updates.notes).note;
+  if (updates.notes !== undefined) {
+    const incoming = splitStatusNote(updates.notes).note.trim();
+    if (incoming) next.notes = incoming;
+  }
   if (updates.status) next.status = updates.status;
   if (updates.appointmentDate !== undefined) next.appointmentDate = updates.appointmentDate;
   next.carlaEmailSent = markedSent(prev) || Boolean(splitStatusNote(updates.notes).carlaEmailSent);
