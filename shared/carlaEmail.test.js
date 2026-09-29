@@ -22,7 +22,7 @@ test('Lisbon date and time split keeps a wall-clock datetime-local and converts 
 });
 
 test('HTML fill uses the locked Carla template and escapes values', () => {
-  const template = readFileSync(new URL('../templates/email-carla-marcacao.html', import.meta.url), 'utf8');
+  const template = readFileSync(new URL('../templates/email-carla-marcacao/template.html', import.meta.url), 'utf8');
   assert.match(template, /ALERTA · Nova 1ª consulta/);
   assert.match(template, /<strong style="font-weight:700;">Acção:<\/strong> Agendar o paciente · confirmar a ida com o paciente no dia anterior\./);
   assert.doesNotMatch(template, /meter na agenda/i);
@@ -62,7 +62,12 @@ test('HTML fill uses the locked Carla template and escapes values', () => {
 });
 
 test('Vanessa notes are a field, and a blank note omits the Notas line', () => {
-  const template = readFileSync(new URL('../templates/email-carla-marcacao.html', import.meta.url), 'utf8');
+  const template = readFileSync(new URL('../templates/email-carla-marcacao/template.html', import.meta.url), 'utf8');
+  const sample = readFileSync(new URL('../templates/email-carla-marcacao/sample.html', import.meta.url), 'utf8');
+  const semNotas = readFileSync(new URL('../templates/email-carla-marcacao/sample-sem-notas.html', import.meta.url), 'utf8');
+  assert.ok(template.includes('<br>\n            <strong>Notas:</strong> {{notas}}'));
+  assert.match(sample, /<strong>Notas:<\/strong> Ligar seg depois das 18:30/);
+  assert.doesNotMatch(semNotas, /Notas:/);
   const withNotes = buildCarlaEmail(
     {
       name: 'Manuel Cunha',

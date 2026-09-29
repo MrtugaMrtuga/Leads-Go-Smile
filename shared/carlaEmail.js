@@ -13,7 +13,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export const CARLA_EMAIL_TO = 'geral@gosmile.pt';
 export const CARLA_EMAIL_MARKER = '[carla-email:sent]';
-export const CARLA_TEMPLATE_PATH = join(__dirname, '..', 'templates', 'email-carla-marcacao.html');
+export const CARLA_TEMPLATE_PATH = join(__dirname, '..', 'templates', 'email-carla-marcacao', 'template.html');
+const NOTAS_LINE = '<br>\n            <strong>Notas:</strong> {{notas}}';
 
 const LISBON = 'Europe/Lisbon';
 
@@ -97,8 +98,8 @@ export function fillCarlaTemplate(template, vars = {}) {
   const notas = notesHtml(vars.notas);
   let html = String(template ?? '');
   if (!notas) {
-    html = html.replace(/<br>\s*<strong>Notas:<\/strong>\s*\{\{notas\}\}/gi, '');
-    html = html.replace(/\s*<strong>Notas:<\/strong>\s*\{\{notas\}\}(?:<br\s*\/?>)?/gi, '');
+    if (html.includes(NOTAS_LINE)) html = html.replace(NOTAS_LINE, '');
+    else html = html.replace(/<br>\s*<strong>Notas:<\/strong>\s*\{\{notas\}\}/gi, '');
   }
   const safe = {
     nome: escapeHtml(vars.nome ?? ''),
