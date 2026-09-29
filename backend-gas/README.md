@@ -113,6 +113,16 @@ Depois de colar este `Code.gs`: **Implementar → Gerir implementações → lá
 
 `action=sync` corre `syncDanielToEvob` (Daniel → EVOB, mesmas regras de corte). Não muda o corte de `leads`, `update`, `create`, `health` nem `ping`. Se inseriu linhas, invalida a cache da lista.
 
+## Email à Carla
+
+Não há segredo novo no Mini. O `update` pode trazer `carlaEmail` (`subject` + `html` já preenchidos). O script só envia se a linha, **depois** da gravação, estiver `Marcada` / `[status:scheduled]`, com **Data Primeira Consulta** preenchida, e **sem** `[carla-email:sent]` em Comentários. Aí chama `MailApp.sendEmail` para `geral@gosmile.pt` (a conta que executa o script) e só depois grava o marcador. Uma falha do correio não grava o marcador, para a gravação seguinte poder tentar outra vez. Mudar a data depois do marcador não reenvia.
+
+1. Cole o `Code.gs` novo no projecto **Leads Inbound META evob**.
+2. No editor, seleccione `authorizeCarlaMail` e **Executar** uma vez, com a conta evobtob. Aceite a permissão de envio de email. Esta função não manda email.
+3. **Implementar → Gerir implementações → lápis → Nova versão**. O URL `/exec` mantém-se.
+
+Etiqueta sugerida: `MacMini-leads-carla-email-v1`.
+
 ## 5. Sync Daniel → EVOB
 
 No projecto **Leads Inbound META evob** (não noutro): cole [`SyncDaniel.gs`](./SyncDaniel.gs), autorize, crie um gatilho temporal de `syncDanielToEvob` a cada 15–30 minutos (em 28 Set 2026 havia 0), corra a função uma vez e publique uma versão nova para `action=sync`. O corte mantém-se `2026-09-01`. A `doGet` falhada ~22:44 PT não é um sync. O alvo é a EVOB ≥ corte passar de 8 para ~29. Detalhe em [SYNC-DANIEL-EVOB.md](../SYNC-DANIEL-EVOB.md).

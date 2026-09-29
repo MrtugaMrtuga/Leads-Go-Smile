@@ -93,6 +93,14 @@ O browser faz `PATCH /api/leads/:id` com `{ "status": "scheduled" }` ou `{ "stat
 
 Agendar pela ficha continua a gravar também **Data Primeira Consulta** e **Médico**. O toque livre não mexe nessas colunas.
 
+### Email à Carla (nova marcação)
+
+Quando um `PATCH` deixa a lead em `scheduled` **e** com **Data Primeira Consulta** preenchida, o Mini pede ao Apps Script para enviar **um** email a `geral@gosmile.pt`. O HTML está em [templates/email-carla-marcacao/template.html](./templates/email-carla-marcacao/template.html) (Marahas re-lock 29 set 2026): título, caixa «Agendar o paciente · confirmar a ida com o paciente no dia anterior.», campos (incluindo Notas, omitida se `notes` vier vazio), rodapé curto. Assunto: `ALERTA · Nova 1ª consulta — {{nome}} — {{data}}`. A hora é Europe/Lisbon: um `datetime-local` já é hora de parede; um instante com `Z` converte-se.
+
+O envio é `MailApp` no script ligado à folha (a conta que o implementa, em regra `evobtob@gmail.com`). Não há cliente Gmail no Mini, nem chave nova, nem projecto Cloud. O marcador `[carla-email:sent]` fica em **Comentários**, ao lado de `[status:]`, e não aparece na ficha. Uma segunda gravação, mesmo que a data mude, não reenvia. Se a data ainda estiver vazia, não envia; quando a data chega mais tarde, envia nessa altura.
+
+Etiqueta sugerida: `MacMini-leads-carla-email-v1`. Publicar uma versão nova do `/exec` e autorizar o `MailApp` (correr `authorizeCarlaMail` uma vez no editor) antes do restart. Sem variáveis novas.
+
 O separador **Estatísticas** mostra a evolução de marcações e fecho. O gráfico é uma linha (preto = marcações, madeira = fecho) para 7, 30 ou 90 dias em Europe/Lisbon; 90 dias agrupa por semana, à segunda. **Linha** ou **Barras**. Por baixo, três linhas: Marcações, Fecho (marcadas + descartadas) e Descartadas, com quantidade e percentagem face às entradas do período. A data do fecho é **Data fecho**; se uma lead antiga não a tiver, conta pela Data Contacto.
 
 O mapa completo está em [backend-gas/README.md](./backend-gas/README.md).
