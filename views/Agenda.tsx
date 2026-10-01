@@ -4,7 +4,7 @@ import LeadPhone from '../components/LeadPhone';
 import LeadRowMain from '../components/LeadRowMain';
 import StatusMove from '../components/StatusMove';
 import { Lead } from '../types';
-import { formatCurrency, listStatusCopy, sortMarcacoesChronological } from '../utils';
+import { appendNoteText, formatCurrency, listStatusCopy, sortMarcacoesChronological } from '../utils';
 
 interface AgendaProps {
   leads: Lead[];
@@ -85,7 +85,11 @@ const Agenda: React.FC<AgendaProps> = ({ leads, onUpdateStatus, onSendReminder, 
               className="cta sec"
               disabled={isSyncing}
               onClick={() => {
-                onUpdateStatus(selected.id, { status: 'contacted' }, { estado: 'FALTOU', status: 'contacted', comentario: 'FALTOU' });
+                onUpdateStatus(
+                  selected.id,
+                  { status: 'contacted', notes: appendNoteText(selected.notes, 'FALTOU') },
+                  { estado: 'FALTOU', status: 'contacted', comentario: 'FALTOU', noteAppend: true }
+                );
                 setSelected(null);
               }}
             >
@@ -104,11 +108,13 @@ const Agenda: React.FC<AgendaProps> = ({ leads, onUpdateStatus, onSendReminder, 
               disabled={!budget || parseFloat(budget) < 0 || isSyncing}
               onClick={() => {
                 const value = parseFloat(budget) || 0;
-                onUpdateStatus(selected.id, { status: 'completed', value }, {
+                const line = `Venda fechada no valor de ${formatCurrency(value)}`;
+                onUpdateStatus(selected.id, { status: 'completed', value, notes: appendNoteText(selected.notes, line) }, {
                   valor_fechado: value,
                   status: 'completed',
                   estado: 'FECHADO',
-                  comentario: `Venda fechada no valor de ${formatCurrency(value)}`,
+                  comentario: line,
+                  noteAppend: true,
                 });
                 setSelected(null);
               }}

@@ -227,6 +227,40 @@ test('CRM patch is posted to Apps Script and keeps the secret off the response',
   assert.equal(echo.body, undefined);
 });
 
+test('empty notes are not posted as a wipe, and an explicit clear is', async () => {
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  const posted = [];
+  const app = createApp();
+  await withFetch(async (_url, init) => {
+    if (init?.method === 'POST') posted.push(JSON.parse(init.body));
+    return new Response(JSON.stringify({ ok: true, headers: HEADERS, row: { row: 2, values: IDA_VALUES } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }, async () => {
+    const kept = await call(app, 'PATCH', '/api/leads/2', { status: 'contacted', notes: '' });
+    assert.equal(kept.status, 200);
+    const wiped = await call(app, 'PATCH', '/api/leads/2', { status: 'contacted', notes: '', noteClear: true });
+    assert.equal(wiped.status, 200);
+    const appended = await call(app, 'PATCH', '/api/leads/2', {
+      status: 'contacted',
+      notes: 'FALTOU',
+      noteAppend: true,
+    });
+    assert.equal(appended.status, 200);
+  });
+  assert.equal(posted[0].noteSet, false);
+  assert.equal(posted[0].noteAppend, false);
+  assert.equal(posted[0].note, '');
+  assert.equal(posted[1].noteSet, true);
+  assert.equal(posted[1].noteClear, true);
+  assert.equal(posted[1].note, '');
+  assert.equal(posted[2].noteSet, false);
+  assert.equal(posted[2].noteAppend, true);
+  assert.equal(posted[2].note, 'FALTOU');
+});
+
 test('marking paid writes Pagamento and keeps the existing note', async () => {
   process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
   process.env.APPS_SCRIPT_SECRET = SECRET;
@@ -906,6 +940,79 @@ test('leads-cache.json is served on a cold process and leads.json is not the lis
   assert.deepEqual(JSON.parse(await readFile(join(dataDir, 'leads.json'), 'utf8')), []);
 });
 
+test('a status write does not read the list first, and a cold cache file is patched', async () => {
+  await clearLeadsListCache();
+  process.env.LEADS_CACHE_TTL_MS = '45000';
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  const stale = {
+    id: '2',
+    name: 'Ida Cristina Albuquerque Malho Rodrigues de Oliveira',
+    phone: '351962852158',
+    email: 'cristina.oliveira.consult@gmail.com',
+    timestamp: '2026-09-20T17:14:04.000Z',
+    contactDay: '2026-09-20',
+    status: 'new',
+    notes: 'nota antiga',
+    source: 'Meta',
+  };
+  await writeFile(join(dataDir, 'leads-cache.json'), `${JSON.stringify({ at: Date.now(), leads: [stale] })}\n`);
+  const actions = [];
+  const values = [...IDA_VALUES];
+  values[6] = '[status:contacted]\nliguei hoje';
+  const app = createApp();
+  await withFetch(async (url, init) => {
+    const action = new URL(String(url)).searchParams.get('action');
+    actions.push(`${action}:${String(init?.method || 'GET').toUpperCase()}`);
+    return new Response(JSON.stringify({ ok: true, headers: HEADERS, row: { row: 2, values } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }, async () => {
+    const patched = await call(app, 'PATCH', '/api/leads/2', { status: 'contacted', notes: 'liguei hoje' });
+    assert.equal(patched.status, 200);
+    const listed = await call(app, 'GET', '/api/leads');
+    assert.equal(listed.headers['x-leads-cache'], 'hit');
+    assert.equal(listed.json[0].notes, 'liguei hoje');
+    assert.equal(listed.json[0].status, 'contacted');
+    assert.equal(JSON.stringify(listed.json).includes('nota antiga'), false);
+  });
+  assert.deepEqual(actions, ['update:POST']);
+});
+
+test('the default warmer refills the Mini leads cache without fresh=1', async () => {
+  await clearLeadsListCache();
+  process.env.LEADS_CACHE_TTL_MS = '45000';
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  delete process.env.LEADS_WARM_ACTION;
+  let leadsCalls = 0;
+  const app = createApp();
+  try {
+    await withFetch(async (url) => {
+      const endpoint = new URL(String(url));
+      const action = endpoint.searchParams.get('action');
+      if (action !== 'leads') throw new Error(`unexpected warm action ${action}`);
+      leadsCalls += 1;
+      assert.equal(endpoint.searchParams.get('fresh'), null);
+      return new Response(JSON.stringify(sheetPayload()), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    }, async () => {
+      const warm = await call(app, 'POST', '/api/leads/warm');
+      assert.equal(warm.status, 200);
+      assert.equal(warm.json.skipped, false);
+      const listed = await call(app, 'GET', '/api/leads');
+      assert.equal(listed.headers['x-leads-cache'], 'hit');
+      assert.equal(listed.json[0].name, 'Ida Cristina Albuquerque Malho Rodrigues de Oliveira');
+      assert.equal(leadsCalls, 1);
+    });
+  } finally {
+    delete process.env.LEADS_WARM_ACTION;
+  }
+});
+
 test('a sheet write is visible on the next warm GET without another list round-trip', async () => {
   await clearLeadsListCache();
   process.env.LEADS_CACHE_TTL_MS = '45000';
@@ -967,7 +1074,7 @@ test('the inbox hydrates a saved list and does not treat the first paint as empt
   assert.match(readFileSync(new URL('../README.md', import.meta.url), 'utf8'), /MacMini-leads-swr-v1/);
 });
 
-test('refresh uses the Apps Script cache, warm pings by default, and sync does not block it', async () => {
+test('refresh uses the Apps Script cache, the warmer refills leads, and sync does not block it', async () => {
   await clearLeadsListCache();
   process.env.LEADS_CACHE_TTL_MS = '45000';
   process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
@@ -1012,7 +1119,27 @@ test('refresh uses the Apps Script cache, warm pings by default, and sync does n
   assert.match(client, /sheetFresh/);
   assert.match(client, /writesInFlight/);
   assert.match(client, /DEFAULT_WARM_MS = 180_000/);
-  assert.match(client, /LEADS_WARM_ACTION \|\| 'ping'/);
+  assert.match(client, /LEADS_WARM_ACTION \|\| 'leads'/);
+  assert.match(client, /noteAppend: patch.noteAppend/);
+  assert.match(gas, /noteAppend/);
+  assert.match(gas, /body\.noteClear/);
+  assert.match(readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8'), /gosmile-leads-refresh-v3/);
+  const inbox = readFileSync(new URL('../views/Inbox.tsx', import.meta.url), 'utf8');
+  const agenda = readFileSync(new URL('../views/Agenda.tsx', import.meta.url), 'utf8');
+  assert.match(inbox, /lead\?\.notes/);
+  assert.match(inbox, /noteDirty/);
+  assert.match(inbox, /noteClear: true/);
+  assert.doesNotMatch(inbox, /setComment\(''\)/);
+  assert.match(agenda, /noteAppend: true/);
+  const appSource = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
+  assert.match(appSource, /leadsEpoch/);
+  assert.match(appSource, /A guardar na folha/);
+  assert.match(appSource, /A atualizar a lista/);
+  assert.match(appSource, /Lead marcada\. Está em Marcações/);
+  assert.match(appSource, /aria-live/);
+  const actionFn = appSource.slice(appSource.indexOf('const handleLeadAction'), appSource.indexOf('const handleCreateLead'));
+  assert.doesNotMatch(actionFn, /loadLeads\(/);
+  assert.match(actionFn, /leadsEpoch/);
   assert.match(client, /payload\?\.leads\) && payload\.leads\.length > 0/);
 
   let releaseSync = () => {};
@@ -1049,7 +1176,7 @@ test('refresh uses the Apps Script cache, warm pings by default, and sync does n
         headers: { 'content-type': 'application/json' },
       });
     }, async () => {
-      delete process.env.LEADS_WARM_ACTION;
+      process.env.LEADS_WARM_ACTION = 'ping';
       const ping = await call(app, 'POST', '/api/leads/warm');
       assert.equal(ping.status, 200);
       assert.equal(ping.json.ok, true);
@@ -1059,12 +1186,11 @@ test('refresh uses the Apps Script cache, warm pings by default, and sync does n
       assert.doesNotMatch(urls[0], /action=leads/);
       assert.doesNotMatch(urls[0], /[?&]fresh=1/);
 
-      process.env.LEADS_WARM_ACTION = 'leads';
+      delete process.env.LEADS_WARM_ACTION;
       const warm = await call(app, 'POST', '/api/leads/warm');
       assert.equal(warm.status, 200);
       assert.match(urls[1], /action=leads/);
-      assert.match(urls[1], /[?&]fresh=1/);
-      delete process.env.LEADS_WARM_ACTION;
+      assert.doesNotMatch(urls[1], /[?&]fresh=1/);
 
       const syncPromise = call(app, 'POST', '/api/leads/sync');
       await syncStarted;
@@ -1082,7 +1208,7 @@ test('refresh uses the Apps Script cache, warm pings by default, and sync does n
       assert.ok(elapsed < 1000, `refresh took ${elapsed}ms while sync was in flight`);
       const leadUrls = urls.filter((href) => href.includes('action=leads'));
       assert.equal(leadUrls.length, 2);
-      assert.match(leadUrls[0], /[?&]fresh=1/);
+      assert.doesNotMatch(leadUrls[0], /[?&]fresh=1/);
       assert.doesNotMatch(leadUrls[1], /[?&]fresh=1/);
       releaseSync();
       const sync = await syncPromise;

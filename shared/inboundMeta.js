@@ -125,6 +125,15 @@ export function splitStatusNote(value) {
   return { status, motivo, fecho, carlaEmailSent, note: text };
 }
 
+/** Free-text note plus an extra line. Blank extra keeps the current text. */
+export function appendNoteText(current, extra) {
+  const base = String(current ?? '').trim();
+  const next = String(extra ?? '').trim();
+  if (!next) return base;
+  if (!base) return next;
+  return `${base}\n${next}`;
+}
+
 export function formatStatusNote(note, status, motivo, fecho, carlaEmailSent) {
   const parsed = splitStatusNote(note);
   const clean = parsed.note;
@@ -147,6 +156,7 @@ export function mergeObservacoes(
     status = '',
     note = '',
     noteSet = false,
+    noteAppend = false,
     motivo = '',
     motivoSet = false,
     fecho = '',
@@ -158,7 +168,11 @@ export function mergeObservacoes(
 ) {
   const parsed = splitStatusNote(currentCell);
   const incoming = splitStatusNote(note);
-  const nextNote = noteSet ? incoming.note : parsed.note;
+  // noteAppend adds a line. noteSet replaces. An empty note does not wipe
+  // unless the caller set noteSet (explicit clear).
+  let nextNote = parsed.note;
+  if (noteAppend) nextNote = appendNoteText(parsed.note, incoming.note);
+  else if (noteSet) nextNote = incoming.note;
   const nextStatus = status || parsed.status;
   const nextMotivo = motivoSet ? cleanMotivo(motivo || incoming.motivo) : incoming.motivo || parsed.motivo;
   let nextFecho = parsed.fecho || incoming.fecho || '';

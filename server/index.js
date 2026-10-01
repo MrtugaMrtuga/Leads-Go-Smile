@@ -8,7 +8,6 @@ import {
   createInboundLead,
   getInboundLead,
   listInboundLeads,
-  rememberInboundLead,
   SheetError,
   sheetWarmerConfig,
   startSheetWarmer,
@@ -98,11 +97,28 @@ function sanitizeLeadInput(raw = {}) {
     const status = String(body.status);
     if (ALLOWED_STATUSES.has(status)) out.status = status;
   }
-  if (body.comentario !== undefined && out.notes === undefined) {
-    out.notes = String(body.comentario);
+  // Empty notes are not a wipe. noteClear replaces with whatever was sent
+  // (including ''). noteAppend keeps the old free text and adds a line.
+  if (body.noteAppend) {
+    out.noteAppend = true;
+    out.noteSet = false;
+    const fragment = body.comentario !== undefined ? body.comentario : body.notes;
+    out.notes = fragment !== undefined ? String(fragment) : '';
+  } else if (body.noteClear === true || body.noteSet === true) {
+    const text = body.notes !== undefined ? body.notes : body.comentario;
+    out.notes = text !== undefined ? String(text) : '';
     out.noteSet = true;
+    if (body.noteClear === true) out.noteClear = true;
+  } else if (body.notes !== undefined || body.comentario !== undefined) {
+    const text = String(body.notes ?? body.comentario ?? '');
+    if (!text.trim()) {
+      delete out.notes;
+      out.noteSet = false;
+    } else {
+      out.notes = text;
+      out.noteSet = true;
+    }
   }
-  if (body.notes !== undefined) out.noteSet = true;
   if (body.medico !== undefined && out.doctor === undefined) out.doctor = String(body.medico);
   if (body.data_consulta !== undefined && out.appointmentDate === undefined) {
     out.appointmentDate = String(body.data_consulta);
@@ -248,7 +264,6 @@ export function createApiRouter() {
     }
     try {
       const lead = await createInboundLead(input);
-      rememberInboundLead(lead);
       res.status(201).json(lead);
     } catch (error) {
       sendSheetError(res, error);
@@ -260,7 +275,6 @@ export function createApiRouter() {
     try {
       const lead = await updateInboundLead(req.params.id, updates);
       if (!lead) return res.status(404).json({ error: 'Lead não encontrada' });
-      rememberInboundLead(lead);
       res.json(lead);
     } catch (error) {
       sendSheetError(res, error);

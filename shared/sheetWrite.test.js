@@ -95,6 +95,73 @@ test('free move Marcada ↔ Em processamento writes only the pipeline columns', 
   );
 });
 
+test('empty notes do not wipe Comentários unless the user cleared them', () => {
+  const untouched = leadPatchToFields({ status: 'contacted', notes: '', comentario: '' }, NOW);
+  assert.equal(untouched.noteSet, false);
+  assert.equal(untouched.noteAppend, false);
+  assert.equal(untouched.noteClear, false);
+  assert.equal(
+    mergeObservacoes('[status:new]\nliguei ontem', {
+      status: untouched.status,
+      note: untouched.note,
+      noteSet: untouched.noteSet,
+      noteAppend: untouched.noteAppend,
+    }),
+    '[status:contacted]\nliguei ontem'
+  );
+
+  const cleared = leadPatchToFields({ status: 'contacted', notes: '', noteClear: true }, NOW);
+  assert.equal(cleared.noteSet, true);
+  assert.equal(cleared.note, '');
+  assert.equal(cleared.noteClear, true);
+  assert.equal(
+    mergeObservacoes('[status:new]\nliguei ontem', {
+      status: cleared.status,
+      note: cleared.note,
+      noteSet: cleared.noteSet,
+    }),
+    '[status:contacted]'
+  );
+});
+
+test('Faltou and Finalizar append to Comentários instead of replacing them', () => {
+  const faltou = leadPatchToFields({ status: 'contacted', notes: 'FALTOU', noteAppend: true }, NOW);
+  assert.equal(faltou.noteSet, false);
+  assert.equal(faltou.noteAppend, true);
+  assert.equal(faltou.note, 'FALTOU');
+  assert.equal(
+    mergeObservacoes('[status:scheduled]\n[fecho:2026-09-21T22:00:00.000Z]\nconsulta marcada', {
+      status: faltou.status,
+      note: faltou.note,
+      noteSet: faltou.noteSet,
+      noteAppend: faltou.noteAppend,
+      fechoClear: faltou.fechoClear,
+    }),
+    '[status:contacted]\nconsulta marcada\nFALTOU'
+  );
+
+  const closed = leadPatchToFields(
+    {
+      status: 'completed',
+      notes: 'Venda fechada no valor de 1.200,00 €',
+      noteAppend: true,
+      value: 1200,
+    },
+    NOW
+  );
+  assert.equal(closed.noteSet, false);
+  assert.equal(closed.noteAppend, true);
+  assert.equal(
+    mergeObservacoes('[status:scheduled]\nconsulta marcada', {
+      status: closed.status,
+      note: closed.note,
+      noteSet: closed.noteSet,
+      noteAppend: closed.noteAppend,
+    }),
+    '[status:completed]\nconsulta marcada\nVenda fechada no valor de 1.200,00 €'
+  );
+});
+
 test('booking writes Estado Marcada', () => {
   const patch = leadPatchToFields({ status: 'scheduled', appointmentDate: '2026-09-22T10:00' }, NOW);
   assert.equal(patch.fields.find((field) => field.header === 'Estado').value, 'Marcada');

@@ -81,8 +81,20 @@ export function leadPatchToFields(updates = {}, now = new Date()) {
     seen.set(`${item.header}#${item.occurrence}`, item);
   };
 
-  let noteSet = Boolean(updates.noteSet) || updates.notes !== undefined || updates.comentario !== undefined;
+  const noteAppend = Boolean(updates.noteAppend);
+  const noteClear = Boolean(updates.noteClear);
   let note = updates.notes ?? updates.comentario ?? '';
+  // A missing note, or an empty string, must not wipe Comentários.
+  // noteClear / noteSet true is the only replace. noteAppend adds a line.
+  let noteSet = false;
+  if (noteAppend) {
+    noteSet = false;
+  } else if (noteClear || updates.noteSet === true) {
+    noteSet = true;
+  } else if (updates.notes !== undefined || updates.comentario !== undefined) {
+    if (String(note).trim() !== '') noteSet = true;
+    else note = '';
+  }
 
   if (updates.doctor !== undefined || updates.medico !== undefined) {
     push(writableByKey('medico_orcamento'), updates.doctor ?? updates.medico ?? '');
@@ -175,6 +187,8 @@ export function leadPatchToFields(updates = {}, now = new Date()) {
     status,
     note: splitStatusNote(note).note,
     noteSet: Boolean(noteSet),
+    noteAppend: Boolean(noteAppend) && !noteSet,
+    noteClear: Boolean(noteClear) && Boolean(noteSet),
     motivo,
     motivoSet: Boolean(motivoSet),
     fecho,

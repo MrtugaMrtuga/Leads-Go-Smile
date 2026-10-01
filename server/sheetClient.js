@@ -170,7 +170,7 @@ async function hydrateFromDisk() {
   if (listCache) return;
   if (!hydrateFlight) {
     const seen = revision;
-    hydrateFlight = (async () => {
+    const flight = (async () => {
       try {
         const raw = JSON.parse(await readFile(cacheFile(), 'utf8'));
         const at = Number(raw?.at);
@@ -180,8 +180,11 @@ async function hydrateFromDisk() {
         }
       } catch (error) {
         if (error?.code !== 'ENOENT') console.error('leads-cache', error.message);
+      } finally {
+        if (hydrateFlight === flight) hydrateFlight = null;
       }
     })();
+    hydrateFlight = flight;
   }
   await hydrateFlight;
 }
@@ -283,13 +286,64 @@ export async function clearLeadsListCache() {
   await rm(cacheFile(), { force: true });
 }
 
-/** Fold a sheet write into the warm list so the next GET does not serve the pre-write snapshot. */
-export function rememberInboundLead(lead) {
+async function mergeColdCache(lead, seen) {
+  if (seen !== revision) return;
+  if (listCache && Array.isArray(listCache.leads)) return;
+  let raw = null;
+  try {
+    raw = JSON.parse(await readFile(cacheFile(), 'utf8'));
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      console.error('leads-cache', error.message);
+      await rm(cacheFile(), { force: true }).catch(() => {});
+    }
+    return;
+  }
+  if (seen !== revision || (listCache && Array.isArray(listCache.leads))) return;
+  if (!raw || !Array.isArray(raw.leads)) {
+    await rm(cacheFile(), { force: true }).catch(() => {});
+    return;
+  }
+  const without = raw.leads.filter((item) => String(item?.id) !== String(lead.id));
+  const leads = filterLeadsForApp([...without, lead]);
+  if (seen !== revision) return;
+  const snapshot = { at: Date.now(), leads };
+  listCache = snapshot;
+  const file = cacheFile();
+  await mkdir(dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  await writeFile(
+    tmp,
+    `${JSON.stringify({ at: snapshot.at, savedAt: new Date(snapshot.at).toISOString(), leads })}\n`,
+    'utf8'
+  );
+  await rename(tmp, file);
+}
+
+/**
+ * Fold a sheet write into the warm list so the next GET is not the pre-write
+ * snapshot. A cold process still patches leads-cache.json before the response.
+ * revision bumps so an in-flight list read cannot commit the older sheet payload.
+ */
+export async function rememberInboundLead(lead) {
   if (!lead || typeof lead !== 'object') return;
   revision += 1;
-  if (!listCache || !Array.isArray(listCache.leads)) return;
-  const without = listCache.leads.filter((item) => String(item.id) !== String(lead.id));
-  commitCache(filterLeadsForApp([...without, lead]));
+  const seen = revision;
+  if (listCache && Array.isArray(listCache.leads)) {
+    const without = listCache.leads.filter((item) => String(item.id) !== String(lead.id));
+    commitCache(filterLeadsForApp([...without, lead]));
+    return;
+  }
+  const job = persistQueue.then(() => mergeColdCache(lead, seen));
+  persistQueue = job.then(
+    () => undefined,
+    () => undefined
+  );
+  try {
+    await job;
+  } catch (error) {
+    console.error('leads-cache', error.message);
+  }
 }
 
 async function fetchFollowing(url, { method = 'GET', body, fetchImpl }) {
@@ -437,10 +491,25 @@ export async function gasRequest({
   }, laneName);
 }
 
+function leadFromMemory(id) {
+  if (!listCache || !Array.isArray(listCache.leads)) return undefined;
+  return listCache.leads.find((lead) => String(lead.id) === String(id)) || null;
+}
+
+/** A list read is only needed when this patch might email Carla and the lead is not cached. */
+function patchMightEmailCarla(updates = {}) {
+  const status = String(updates.status || '').trim().toLowerCase();
+  const date = updates.appointmentDate ?? updates.data_consulta;
+  if (status && status !== 'scheduled') return false;
+  if (status === 'scheduled') return true;
+  return date !== undefined && String(date).trim() !== '';
+}
+
 export async function listInboundLeads(options = {}) {
   const cfg = appsScriptConfig(options.env);
   if (!cfg.configured) return { leads: [], configured: false, cache: 'unconfigured' };
 
+  await persistQueue;
   const { fresh = false, bypassCache = false, sheetFresh = false, ...gasOptions } = options;
 
   // A forced refresh must not wipe memory or the cache file first. Wiping
@@ -516,10 +585,16 @@ export async function updateInboundLead(id, updates, options = {}) {
     if (error instanceof PipelineError) throw new SheetError(error.message, 400);
     throw error;
   }
-  if (!patch.fields.length && !patch.noteSet && !patch.status && !patch.motivoSet && !patch.fechoSet) {
+  if (!patch.fields.length && !patch.noteSet && !patch.noteAppend && !patch.status && !patch.motivoSet && !patch.fechoSet) {
     throw new SheetError('Nada para actualizar', 400);
   }
-  const previous = options.previous !== undefined ? options.previous : await loadPreviousLead(id, options);
+  let previous = options.previous;
+  if (previous === undefined) {
+    const cached = leadFromMemory(String(id));
+    if (cached !== undefined) previous = cached;
+    else if (patchMightEmailCarla(updates)) previous = await loadPreviousLead(id, options);
+    else previous = null;
+  }
   const projected = projectLead(previous, updates);
   let carlaEmail;
   if (options.carlaEmail !== undefined) carlaEmail = options.carlaEmail;
@@ -529,6 +604,8 @@ export async function updateInboundLead(id, updates, options = {}) {
     status: patch.status,
     note: patch.note,
     noteSet: patch.noteSet,
+    noteAppend: patch.noteAppend,
+    noteClear: patch.noteClear,
     motivo: patch.motivo,
     motivoSet: patch.motivoSet,
     fecho: patch.fecho,
@@ -549,6 +626,7 @@ export async function updateInboundLead(id, updates, options = {}) {
   else if (payload?.carlaEmail === 'sent') console.log('carla email sent', id);
   const lead = leadFromPayload(payload);
   if (!lead) throw new SheetError('Lead não encontrada', 404);
+  await rememberInboundLead(lead);
   return lead;
 }
 
@@ -589,6 +667,7 @@ export async function createInboundLead(input, options = {}) {
   });
   const lead = leadFromPayload(payload);
   if (!lead) throw new SheetError('A folha não devolveu a lead criada');
+  await rememberInboundLead(lead);
   return lead;
 }
 
@@ -598,22 +677,30 @@ export function sheetWarmerConfig(env = process.env) {
   const raw = env.LEADS_WARM_MS;
   const intervalMs = raw === undefined || raw === '' ? DEFAULT_WARM_MS : Number(raw);
   const enabled = Number.isFinite(intervalMs) && intervalMs >= 60_000;
-  const action = String(env.LEADS_WARM_ACTION || 'ping').trim() || 'ping';
+  const action = String(env.LEADS_WARM_ACTION || 'leads').trim() || 'leads';
   return { enabled, intervalMs: enabled ? intervalMs : 0, action };
 }
 
 /**
- * Wake /exec so a cold start does not sit on the 55s abort. Default action=ping
- * does not read the sheet. LEADS_WARM_ACTION=leads refills the list cache.
+ * Wake /exec and refill the leads cache when CacheService missed.
+ * Default action=leads does not send fresh=1: a hit is cheap, a miss reads
+ * the sheet and the Mini keeps that list. LEADS_WARM_ACTION=ping only wakes.
  */
-export function warmAppsScript() {
+export async function warmAppsScript() {
   const { configured } = appsScriptConfig();
   if (!configured) throw new SheetError('Apps Script não configurado', 503);
   const { action } = sheetWarmerConfig();
   if (action !== 'ping' && action !== 'leads' && action !== 'health') {
     throw new SheetError('LEADS_WARM_ACTION inválida', 500);
   }
-  return gasRequest({ action, method: 'GET', lane: 'warm', fresh: action === 'leads' });
+  const seen = revision;
+  const started = Date.now();
+  const payload = await gasRequest({ action, method: 'GET', lane: 'warm', fresh: false });
+  if (action === 'leads' && payload && !payload.skipped && seen === revision) {
+    const leads = filterLeadsForApp(leadsFromPayload(payload));
+    if (leads.length) commitCache(leads, metaFromPayload(payload, Date.now() - started));
+  }
+  return payload;
 }
 
 export function startSheetWarmer() {

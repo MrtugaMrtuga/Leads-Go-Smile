@@ -27,7 +27,9 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
   const [activeModal, setActiveModal] = useState<ModalType>('none');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [newLead, setNewLead] = useState({ name: '', phone: '', email: '', notes: '' });
-  const [comment, setComment] = useState('');
+  const [noteDraft, setNoteDraft] = useState('');
+  const [noteDirty, setNoteDirty] = useState(false);
+  const [motivoDraft, setMotivoDraft] = useState('');
   const [appointmentDate, setAppointmentDate] = useState('');
   const [selectedDoctor, setSelectedDoctor] = useState('');
   const [isOrto, setIsOrto] = useState(false);
@@ -60,7 +62,9 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
 
   const open = (type: ModalType, lead?: Lead) => {
     setSelectedLead(lead || null);
-    setComment('');
+    setNoteDraft(lead?.notes || '');
+    setNoteDirty(false);
+    setMotivoDraft('');
     setAppointmentDate('');
     setSelectedDoctor('');
     setIsOrto(false);
@@ -69,9 +73,23 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
 
   const close = () => setActiveModal('none');
 
+  const editNote = (value: string) => {
+    setNoteDraft(value);
+    setNoteDirty(true);
+  };
+
+  const noteExtra = () => {
+    if (!noteDirty) return {};
+    if (!noteDraft.trim()) return { comentario: '', noteClear: true };
+    return { comentario: noteDraft };
+  };
+
   const submitComment = () => {
     if (!selectedLead) return;
-    onUpdateStatus(selectedLead.id, { status: 'contacted', notes: comment }, { comentario: comment });
+    const extra = noteExtra();
+    const updates: Partial<Lead> = { status: 'contacted' };
+    if (noteDirty) updates.notes = noteDraft;
+    onUpdateStatus(selectedLead.id, updates, extra);
     close();
   };
 
@@ -83,7 +101,7 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
 
   const submitDiscard = () => {
     if (!selectedLead) return;
-    const motivo = comment.trim();
+    const motivo = motivoDraft.trim();
     if (!motivo) return;
     onUpdateStatus(
       selectedLead.id,
@@ -95,11 +113,15 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
 
   const submitSchedule = () => {
     if (!selectedLead || !selectedDoctor || !appointmentDate) return;
-    onUpdateStatus(
-      selectedLead.id,
-      { status: 'scheduled', doctor: selectedDoctor, appointmentDate, notes: comment },
-      { medico: selectedDoctor, data_consulta: appointmentDate, status: 'scheduled', comentario: comment }
-    );
+    const extra = {
+      medico: selectedDoctor,
+      data_consulta: appointmentDate,
+      status: 'scheduled' as const,
+      ...noteExtra(),
+    };
+    const updates: Partial<Lead> = { status: 'scheduled', doctor: selectedDoctor, appointmentDate };
+    if (noteDirty) updates.notes = noteDraft;
+    onUpdateStatus(selectedLead.id, updates, extra);
     close();
   };
 
@@ -231,7 +253,7 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
                 />
                 <label className="field">
                   Nota
-                  <textarea className="field" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="O que foi acordado?" />
+                  <textarea className="field" value={noteDraft} onChange={(e) => editNote(e.target.value)} placeholder="O que foi acordado?" />
                 </label>
                 <button type="button" className="cta" onClick={submitComment}>
                   Marcar contactada
@@ -242,7 +264,14 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
                 <button type="button" className="cta sec" onClick={() => setActiveModal('schedule')}>
                   Agendar
                 </button>
-                <button type="button" className="cta sec" onClick={() => setActiveModal('discard')}>
+                <button
+                  type="button"
+                  className="cta sec"
+                  onClick={() => {
+                    setMotivoDraft(noteDirty ? noteDraft : '');
+                    setActiveModal('discard');
+                  }}
+                >
                   Descartar
                 </button>
               </>
@@ -252,9 +281,9 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
               <>
                 <label className="field">
                   Motivo
-                  <textarea className="field" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Porque vai descartar?" />
+                  <textarea className="field" value={motivoDraft} onChange={(e) => setMotivoDraft(e.target.value)} placeholder="Porque vai descartar?" />
                 </label>
-                <button type="button" className="cta" disabled={!comment.trim()} onClick={submitDiscard}>
+                <button type="button" className="cta" disabled={!motivoDraft.trim()} onClick={submitDiscard}>
                   Confirmar descarte
                 </button>
               </>
@@ -301,7 +330,7 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
                 </label>
                 <label className="field">
                   Notas
-                  <textarea className="field" value={comment} onChange={(e) => setComment(e.target.value)} />
+                  <textarea className="field" value={noteDraft} onChange={(e) => editNote(e.target.value)} />
                 </label>
                 <button type="button" className="cta" disabled={!selectedDoctor || !appointmentDate} onClick={submitSchedule}>
                   Confirmar marcação

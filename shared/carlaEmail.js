@@ -170,7 +170,13 @@ export function projectLead(previous, updates = {}) {
   if (updates.email !== undefined) next.email = updates.email;
   if (updates.doctor !== undefined) next.doctor = updates.doctor;
   if (updates.source !== undefined) next.source = updates.source;
-  if (updates.notes !== undefined) {
+  if (updates.noteAppend) {
+    const extra = splitStatusNote(updates.notes).note.trim();
+    const base = splitStatusNote(prev.notes).note.trim();
+    if (extra) next.notes = base ? `${base}\n${extra}` : extra;
+  } else if (updates.noteClear || updates.noteSet === true) {
+    next.notes = splitStatusNote(updates.notes ?? '').note;
+  } else if (updates.notes !== undefined) {
     const incoming = splitStatusNote(updates.notes).note.trim();
     if (incoming) next.notes = incoming;
   }

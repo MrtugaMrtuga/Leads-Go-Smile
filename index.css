@@ -836,6 +836,17 @@ textarea.field:focus {
   font-weight: 400;
 }
 
+.sync-line {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: var(--mute);
+}
+
+.sync-line.is-error {
+  color: var(--dot-red);
+  font-weight: 500;
+}
+
 .center-note {
   color: var(--mute);
   font-size: 13px;

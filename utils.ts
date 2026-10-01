@@ -1,6 +1,7 @@
 
 import { Lead, LeadFormField } from './types';
 import {
+  appendNoteText as appendNoteTextJs,
   closeEvolution as closeEvolutionJs,
   closeWindow as closeWindowJs,
   filledLeadFields as filledLeadFieldsJs,
@@ -19,6 +20,10 @@ import { formatPhoneDisplay as formatPhoneDisplayJs, toE164 as toE164Js, toTelHr
 
 export function humanizeMetaValue(value: unknown): string {
   return humanizeMetaValueJs(value);
+}
+
+export function appendNoteText(current: unknown, extra: unknown): string {
+  return appendNoteTextJs(current, extra);
 }
 
 export function mapDataToLeads(data: unknown[]): Lead[] {
