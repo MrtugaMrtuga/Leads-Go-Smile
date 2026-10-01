@@ -14,6 +14,7 @@ import {
   sortLeadsNewestFirst as sortLeadsNewestFirstJs,
   sortMarcacoesChronological as sortMarcacoesChronologicalJs,
 } from './shared/inboundMeta.js';
+import { filterListedLeads as filterListedLeadsJs } from './shared/leadSearch.js';
 import { formatPhoneDisplay as formatPhoneDisplayJs, toE164 as toE164Js, toTelHref as toTelHrefJs } from './shared/phone.js';
 
 export function humanizeMetaValue(value: unknown): string {
@@ -54,6 +55,10 @@ export function filledLeadFields(lead: Lead): LeadFormField[] {
 
 export function listBucket(status: Lead['status']) {
   return listBucketJs(status) as 'inbox' | 'marcadas' | 'descartadas' | 'other';
+}
+
+export function filterListedLeads(leads: Lead[], bucket: 'inbox' | 'descartadas', query: string) {
+  return filterListedLeadsJs(leads, bucket, query) as Lead[];
 }
 
 export function nextPipelineStatus(status: Lead['status']) {
