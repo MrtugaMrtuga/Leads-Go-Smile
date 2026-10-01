@@ -1150,6 +1150,24 @@ test('a leads-only list keeps doctor, value and the contact cutoff', async () =>
   });
 });
 
+test('inbox and marcações list every loaded lead, not the selected month', () => {
+  const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
+  const agenda = readFileSync(new URL('../views/Agenda.tsx', import.meta.url), 'utf8');
+  const layout = readFileSync(new URL('../components/Layout.tsx', import.meta.url), 'utf8');
+  const inbox = app.slice(app.indexOf("case 'inbox'"), app.indexOf("case 'lixo'"));
+  const visitas = app.slice(app.indexOf("case 'visitas'"), app.indexOf("case 'contas'"));
+  assert.match(inbox, /leads=\{leads\}/);
+  assert.doesNotMatch(inbox, /currentLeads/);
+  assert.match(visitas, /leads\.filter\(\(l\) => l\.status === 'scheduled'\)/);
+  assert.doesNotMatch(visitas, /currentLeads/);
+  assert.match(agenda, /sortMarcacoesChronological/);
+  assert.doesNotMatch(agenda, /monthLabel|sortLeadsNewestFirst/);
+  assert.match(layout, /activeView !== 'visitas'/);
+  assert.match(app, /<Trash[\s\S]*?currentLeads/);
+  assert.match(app, /<Accounts[\s\S]*?currentLeads/);
+  assert.match(app, /allLeads=\{leads\}/);
+});
+
 test('inbox menu keeps Descartadas and leaves scheduled leads on the dock', () => {
   const inbox = readFileSync(new URL('../views/Inbox.tsx', import.meta.url), 'utf8');
   const dock = readFileSync(new URL('../constants.tsx', import.meta.url), 'utf8');
