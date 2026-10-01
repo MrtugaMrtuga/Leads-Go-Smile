@@ -40,6 +40,11 @@ export interface LeadUpdatePayload {
   lead_id?: string;
   estado?: string;
   comentario?: string;
+  /** Add comentario under the existing free text. Does not replace it. */
+  noteAppend?: boolean;
+  /** User cleared the note box. Empty comentario then wipes the free text. */
+  noteClear?: boolean;
+  noteSet?: boolean;
   medico?: string;
   data_consulta?: string;
   valor_fechado?: number;

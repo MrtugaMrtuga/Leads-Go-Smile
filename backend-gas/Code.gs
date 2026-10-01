@@ -20,6 +20,9 @@
  * CacheService guarda esse JSON 60s. Sem fresh=1, um hit não relê a folha.
  * fresh=1 ignora a cache. update/create e um sync com inserções chamam
  * bumpLeadsCache_. action=ping não lê a folha.
+ * Comentários: noteSet substitui o texto livre. noteAppend acrescenta uma
+ * linha (FALTOU / venda fechada). noteSet com nota vazia só apaga se
+ * noteClear for verdadeiro — uma string vazia não limpa a nota.
  * action=sync corre syncDanielToEvob e não muda o corte nem as outras ações.
  *
  * Marcação com data: se o Mini manda carlaEmail no update, MailApp envia
@@ -140,10 +143,17 @@ function formatStatusNote_(note, status, motivo, fecho, carlaEmailSent) {
   return clean ? lines.join('\n') + '\n' + clean : lines.join('\n');
 }
 
-function mergeObservacoes_(currentCell, status, note, noteSet, motivo, motivoSet, fecho, fechoSet, fechoClear, carlaSent, carlaSentSet) {
+function mergeObservacoes_(currentCell, status, note, noteSet, motivo, motivoSet, fecho, fechoSet, fechoClear, carlaSent, carlaSentSet, noteAppend) {
   var parsed = splitStatusNote_(currentCell);
   var incoming = splitStatusNote_(note);
-  var nextNote = noteSet ? incoming.note : parsed.note;
+  var nextNote = parsed.note;
+  if (noteAppend) {
+    var extra = String(incoming.note || '').replace(/^\s+|\s+$/g, '');
+    var base = String(parsed.note || '').replace(/^\s+|\s+$/g, '');
+    nextNote = extra ? (base ? base + '\n' + extra : extra) : base;
+  } else if (noteSet) {
+    nextNote = incoming.note;
+  }
   var nextStatus = status || parsed.status;
   var nextMotivo = motivoSet ? cleanMotivo_(motivo || incoming.motivo) : incoming.motivo || parsed.motivo;
   var nextFecho = parsed.fecho || incoming.fecho || '';
@@ -744,8 +754,8 @@ function stampFechoField_(fields, value, clear) {
   return list;
 }
 
-function writeObservacoes_(sheet, rowNumber, status, note, noteSet, motivo, motivoSet, fecho, fechoSet, fechoClear) {
-  if (!noteSet && !status && !motivoSet && !fechoSet && !fechoClear) return null;
+function writeObservacoes_(sheet, rowNumber, status, note, noteSet, motivo, motivoSet, fecho, fechoSet, fechoClear, noteAppend) {
+  if (!noteSet && !noteAppend && !status && !motivoSet && !fechoSet && !fechoClear) return null;
   var lastColumn = Math.max(sheet.getLastColumn(), 1);
   var headers = trimRow_(sheet.getRange(1, 1, 1, lastColumn).getDisplayValues()[0]);
   var column = findNotesColumn_(indexHeaders_(headers));
@@ -760,7 +770,10 @@ function writeObservacoes_(sheet, rowNumber, status, note, noteSet, motivo, moti
     Boolean(motivoSet),
     fecho,
     Boolean(fechoSet),
-    Boolean(fechoClear)
+    Boolean(fechoClear),
+    false,
+    false,
+    Boolean(noteAppend)
   );
   cell.setValue(next);
   return next;
@@ -836,7 +849,10 @@ function updateLead_(body) {
     var sheet = getLeadsSheet_();
     if (rowNumber > sheet.getLastRow()) throw new Error('Lead não encontrada');
     var status = String(body.status || '').trim().toLowerCase();
-    var noteSet = Boolean(body.noteSet);
+    var noteAppend = Boolean(body.noteAppend);
+    var noteClear = Boolean(body.noteClear);
+    var noteSet = Boolean(body.noteSet) && !noteAppend;
+    if (noteSet && !noteClear && String(body.note || '').trim() === '') noteSet = false;
     var motivoSet = Boolean(body.motivoSet);
     var fechoSet = Boolean(body.fechoSet);
     var fechoClear = Boolean(body.fechoClear);
@@ -852,7 +868,7 @@ function updateLead_(body) {
     }
     var notesBefore = currentObservacoes_(sheet, rowNumber);
     applyFields_(sheet, rowNumber, fields);
-    var notesWritten = writeObservacoes_(sheet, rowNumber, status, body.note || '', noteSet, body.motivo || '', motivoSet, body.fecho || '', fechoSet, fechoClear);
+    var notesWritten = writeObservacoes_(sheet, rowNumber, status, body.note || '', noteSet, body.motivo || '', motivoSet, body.fecho || '', fechoSet, fechoClear, noteAppend);
     var carla = maybeSendCarlaEmail_(sheet, rowNumber, body, notesWritten == null ? notesBefore : notesWritten);
     SpreadsheetApp.flush();
     try {

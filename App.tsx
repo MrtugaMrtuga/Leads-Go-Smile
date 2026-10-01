@@ -48,11 +48,16 @@ const App: React.FC = () => {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const refreshingRef = useRef(false);
+  const leadsEpoch = useRef(0);
+  const loadSerial = useRef(0);
+  const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [settings, setSettings] = useState<AdminSettings>({ commissionPercent: 3 });
 
-  const applyLeads = useCallback((nextLeads: Lead[], options?: { deferPersist?: boolean }) => {
+  const applyLeads = useCallback((nextLeads: Lead[], options?: { deferPersist?: boolean; epoch?: number }) => {
+    if (options && options.epoch !== undefined && options.epoch !== leadsEpoch.current) return null;
     const mapped = sortLeadsNewestFirst(mapDataToLeads(nextLeads));
     setLeads(mapped);
     setListSettled(true);
@@ -61,27 +66,39 @@ const App: React.FC = () => {
     return mapped;
   }, []);
 
+  const showNotice = (text: string) => {
+    setNotice(text);
+    if (noticeTimer.current) clearTimeout(noticeTimer.current);
+    noticeTimer.current = setTimeout(() => setNotice(null), 4500);
+  };
+
   const loadLeads = useCallback(async () => {
+    const serial = ++loadSerial.current;
+    const epoch = leadsEpoch.current;
     setIsLoading(true);
     setFetchError(null);
     try {
       const [next, nextSettings, health] = await Promise.all([fetchLeads(), fetchSettings(), fetchHealth()]);
+      if (epoch !== leadsEpoch.current) return;
       setSettings(nextSettings);
       if (next.cache === 'unconfigured' || health.configured === false) {
         setFetchError('Defina APPS_SCRIPT_URL e APPS_SCRIPT_SECRET no Mini');
-        if (readCachedLeads() === null) applyLeads(next.leads);
+        if (readCachedLeads() === null) applyLeads(next.leads, { epoch });
       } else {
-        applyLeads(next.leads);
+        applyLeads(next.leads, { epoch });
         if (next.cache === 'stale') {
           const fresh = await fetchLeads({ fresh: true });
-          applyLeads(fresh.leads);
+          if (epoch !== leadsEpoch.current) return;
+          applyLeads(fresh.leads, { epoch });
         }
       }
     } catch (error) {
       console.error(error);
-      setFetchError(error instanceof Error ? error.message : 'API local indisponível');
+      if (epoch === leadsEpoch.current) {
+        setFetchError(error instanceof Error ? error.message : 'API local indisponível');
+      }
     } finally {
-      setIsLoading(false);
+      if (serial === loadSerial.current) setIsLoading(false);
     }
   }, [applyLeads]);
 
@@ -92,6 +109,7 @@ const App: React.FC = () => {
   const refreshFromSheet = useCallback(() => {
     if (refreshingRef.current) return;
     refreshingRef.current = true;
+    const epoch = leadsEpoch.current;
     // Paint the spinning icon before the sheet request starts.
     flushSync(() => {
       setIsRefreshing(true);
@@ -100,15 +118,17 @@ const App: React.FC = () => {
     void (async () => {
       try {
         const next = await refreshLeads();
+        if (epoch !== leadsEpoch.current) return;
         if (next.cache === 'unconfigured') {
           setFetchError('Defina APPS_SCRIPT_URL e APPS_SCRIPT_SECRET no Mini');
           return;
         }
-        applyLeads(next.leads, { deferPersist: true });
+        applyLeads(next.leads, { deferPersist: true, epoch });
       } catch (error) {
         console.error(error);
-        setFetchError(error instanceof Error ? error.message : 'API local indisponível');
-        setTimeout(() => setFetchError(null), 3000);
+        if (epoch !== leadsEpoch.current) return;
+        setFetchError(error instanceof Error ? error.message : 'Não foi possível atualizar a lista');
+        setTimeout(() => setFetchError(null), 5000);
       } finally {
         refreshingRef.current = false;
         setIsRefreshing(false);
@@ -118,27 +138,48 @@ const App: React.FC = () => {
 
   const handleLeadAction = async (id: string, updates: Partial<Lead>, extraData?: Partial<LeadUpdatePayload>) => {
     const motivo = extraData?.motivo ?? updates.discardReason;
-    const payload: Partial<Lead> & Record<string, unknown> = {
-      ...updates,
-      notes: extraData?.comentario ?? updates.notes,
-      doctor: extraData?.medico ?? updates.doctor,
-      appointmentDate: extraData?.data_consulta ?? updates.appointmentDate,
-      value: extraData?.valor_fechado !== undefined ? extraData.valor_fechado : updates.value,
-      status: extraData?.status || updates.status,
-    };
-    if (motivo !== undefined) {
-      payload.motivo = motivo;
-      payload.discardReason = motivo;
+    const nextStatus = extraData?.status || updates.status;
+    const optimistic: Partial<Lead> = { ...updates };
+    if (extraData?.medico !== undefined) optimistic.doctor = extraData.medico;
+    if (extraData?.data_consulta !== undefined) optimistic.appointmentDate = extraData.data_consulta;
+    if (extraData?.valor_fechado !== undefined) optimistic.value = extraData.valor_fechado;
+    if (nextStatus) optimistic.status = nextStatus;
+    if (extraData?.comentario !== undefined && !extraData.noteAppend && extraData.noteClear !== true) {
+      optimistic.notes = extraData.comentario;
     }
+    if (motivo !== undefined) optimistic.discardReason = motivo;
 
+    const serverPayload: Record<string, unknown> = { ...optimistic };
+    if (extraData?.noteAppend) {
+      serverPayload.noteAppend = true;
+      serverPayload.noteSet = false;
+      serverPayload.notes = extraData.comentario ?? '';
+    } else if (extraData?.noteClear) {
+      serverPayload.noteClear = true;
+      serverPayload.noteSet = true;
+      serverPayload.notes = extraData.comentario ?? '';
+    } else if (extraData?.comentario !== undefined) {
+      serverPayload.notes = extraData.comentario;
+      serverPayload.noteSet = true;
+    } else if (!Object.prototype.hasOwnProperty.call(updates, 'notes')) {
+      delete serverPayload.notes;
+    }
+    if (motivo !== undefined) serverPayload.motivo = motivo;
+
+    const writeEpoch = ++leadsEpoch.current;
+    const snapshot = leads.find((lead) => lead.id === id);
     setLeads((prev) => {
-      const next = prev.map((lead) => (lead.id === id ? { ...lead, ...payload } as Lead : lead));
+      const next = prev.map((lead) => (lead.id === id ? { ...lead, ...optimistic } as Lead : lead));
       writeCachedLeadsNow(next);
       return next;
     });
+    const movedToAgenda = nextStatus === 'scheduled' && !!snapshot && snapshot.status !== 'scheduled';
+    if (movedToAgenda) showNotice('Lead marcada. Está em Marcações.');
     setIsSyncing(true);
+    setFetchError(null);
     try {
-      const saved = await updateLead(id, payload);
+      const saved = await updateLead(id, serverPayload);
+      if (writeEpoch !== leadsEpoch.current) return;
       setLeads((prev) => {
         const next = prev.map((lead) => (lead.id === id ? saved : lead));
         writeCachedLeadsNow(next);
@@ -146,18 +187,29 @@ const App: React.FC = () => {
       });
     } catch (error) {
       console.error('Failed to sync:', error);
-      setFetchError('Erro ao guardar lead');
-      setTimeout(() => setFetchError(null), 3000);
-      await loadLeads();
+      if (writeEpoch !== leadsEpoch.current) return;
+      if (movedToAgenda) setNotice(null);
+      if (snapshot) {
+        const previous = snapshot;
+        setLeads((prev) => {
+          const next = prev.map((lead) => (lead.id === id ? previous : lead));
+          writeCachedLeadsNow(next);
+          return next;
+        });
+      }
+      setFetchError('Erro ao guardar na folha. A alteração não ficou gravada.');
+      setTimeout(() => setFetchError(null), 5000);
     } finally {
-      setIsSyncing(false);
+      if (writeEpoch === leadsEpoch.current) setIsSyncing(false);
     }
   };
 
   const handleCreateLead = async (input: Pick<Lead, 'name' | 'phone' | 'email' | 'notes'>) => {
+    const writeEpoch = ++leadsEpoch.current;
     setIsSyncing(true);
     try {
       const lead = await createLead({ ...input, status: 'new', source: 'Manual' });
+      if (writeEpoch !== leadsEpoch.current) return;
       setLeads((prev) => {
         const next = sortLeadsNewestFirst([lead, ...prev.filter((item) => item.id !== lead.id)]);
         writeCachedLeadsNow(next);
@@ -165,10 +217,11 @@ const App: React.FC = () => {
       });
     } catch (error) {
       console.error(error);
+      if (writeEpoch !== leadsEpoch.current) return;
       setFetchError('Erro ao criar lead');
-      setTimeout(() => setFetchError(null), 3000);
+      setTimeout(() => setFetchError(null), 5000);
     } finally {
-      setIsSyncing(false);
+      if (writeEpoch === leadsEpoch.current) setIsSyncing(false);
     }
   };
 
@@ -292,6 +345,14 @@ const App: React.FC = () => {
     }
   };
 
+  const syncLine = isSyncing
+    ? { tone: 'busy' as const, text: 'A guardar na folha…' }
+    : isRefreshing
+      ? { tone: 'busy' as const, text: 'A atualizar a lista…' }
+      : fetchError
+        ? { tone: 'error' as const, text: fetchError }
+        : null;
+
   return (
     <Layout
       activeView={activeView}
@@ -318,9 +379,20 @@ const App: React.FC = () => {
       onRefresh={refreshFromSheet}
       isRefreshing={isRefreshing}
     >
-      {(fetchError || isSyncing) && (
-        <div className="toast">{isSyncing ? 'A processar…' : fetchError}</div>
-      )}
+      {syncLine ? (
+        <p
+          className={`sync-line${syncLine.tone === 'error' ? ' is-error' : ''}`}
+          role="status"
+          aria-live={syncLine.tone === 'error' ? 'assertive' : 'polite'}
+        >
+          {syncLine.text}
+        </p>
+      ) : null}
+      {notice ? (
+        <div className="toast" role="status" aria-live="polite">
+          {notice}
+        </div>
+      ) : null}
       {renderView()}
     </Layout>
   );
