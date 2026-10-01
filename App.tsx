@@ -118,14 +118,12 @@ const App: React.FC = () => {
 
   const handleLeadAction = async (id: string, updates: Partial<Lead>, extraData?: Partial<LeadUpdatePayload>) => {
     const motivo = extraData?.motivo ?? updates.discardReason;
-    const payload: Partial<Lead> & Record<string, unknown> = {
-      ...updates,
-      notes: extraData?.comentario ?? updates.notes,
-      doctor: extraData?.medico ?? updates.doctor,
-      appointmentDate: extraData?.data_consulta ?? updates.appointmentDate,
-      value: extraData?.valor_fechado !== undefined ? extraData.valor_fechado : updates.value,
-      status: extraData?.status || updates.status,
-    };
+    const payload: Partial<Lead> & Record<string, unknown> = { ...updates };
+    if (extraData?.comentario !== undefined) payload.notes = extraData.comentario;
+    if (extraData?.medico !== undefined) payload.doctor = extraData.medico;
+    if (extraData?.data_consulta !== undefined) payload.appointmentDate = extraData.data_consulta;
+    if (extraData?.valor_fechado !== undefined) payload.value = extraData.valor_fechado;
+    if (extraData?.status) payload.status = extraData.status;
     if (motivo !== undefined) {
       payload.motivo = motivo;
       payload.discardReason = motivo;

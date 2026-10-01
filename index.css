@@ -12,6 +12,8 @@
   --dot-yellow: #e0b000;
   --dot-green: #1f8a4c;
   --dot-red: #c62828;
+  --dot-blue: #1565c0;
+  --tone-yellow: #9a7200;
   --font: "Poppins", system-ui, sans-serif;
 }
 
@@ -482,6 +484,10 @@ h1.page-title {
   background: var(--dot-red);
 }
 
+.status-dot.blue {
+  background: var(--dot-blue);
+}
+
 .lead-name-text {
   min-width: 0;
 }
@@ -585,6 +591,52 @@ h1.page-title {
   white-space: normal;
 }
 
+.row.stack {
+  flex-wrap: wrap;
+  align-items: flex-start;
+}
+
+.row-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-width: 0;
+}
+
+.status-choices.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  width: 100%;
+}
+
+.status-choices.row .row-move {
+  max-width: none;
+  min-height: 32px;
+  padding: 4px 0;
+  text-align: left;
+}
+
+.status-choices.row .row-move.tone-red {
+  color: var(--dot-red);
+}
+
+.status-choices.row .row-move.tone-yellow {
+  color: var(--tone-yellow);
+}
+
+.status-choices.row .row-move.tone-blue {
+  color: var(--dot-blue);
+}
+
+.status-choices.row .row-move:disabled,
+.cta.tone-red:disabled,
+.cta.tone-yellow:disabled,
+.cta.tone-blue:disabled {
+  opacity: 0.35;
+}
+
 .chevron {
   color: var(--mute);
   font-size: 22px;
@@ -593,21 +645,24 @@ h1.page-title {
   flex-shrink: 0;
 }
 
+.day-block {
+  padding: 13px 0;
+  border-top: 1px solid #dcdcdc;
+}
+
+.day-block:last-child {
+  border-bottom: 1px solid #dcdcdc;
+}
+
 .day-line {
   display: grid;
-  grid-template-columns: 58px minmax(0, 1fr) auto;
+  grid-template-columns: 58px minmax(0, 1fr);
   gap: 12px;
   align-items: center;
   min-height: 48px;
-  padding: 13px 0;
-  border-top: 1px solid #dcdcdc;
   width: 100%;
   text-align: left;
   background: none;
-}
-
-.day-line:last-child {
-  border-bottom: 1px solid #dcdcdc;
 }
 
 .day-line-when {
@@ -733,6 +788,21 @@ textarea.field:focus {
   color: var(--ink);
   border: 1px solid var(--ink);
   margin-top: 10px;
+}
+
+.cta.sec.tone-red {
+  border-color: var(--dot-red);
+  color: var(--dot-red);
+}
+
+.cta.sec.tone-yellow {
+  border-color: var(--tone-yellow);
+  color: var(--tone-yellow);
+}
+
+.cta.sec.tone-blue {
+  border-color: var(--dot-blue);
+  color: var(--dot-blue);
 }
 
 .cta[disabled] {

@@ -7,7 +7,6 @@ import {
   humanizeMetaValue as humanizeMetaValueJs,
   listBucket as listBucketJs,
   mapDataToLeads as mapDataToLeadsJs,
-  nextPipelineStatus as nextPipelineStatusJs,
   pipelineBreakdown as pipelineBreakdownJs,
   pipelineStats as pipelineStatsJs,
   pipelineTone as pipelineToneJs,
@@ -56,10 +55,6 @@ export function listBucket(status: Lead['status']) {
   return listBucketJs(status) as 'inbox' | 'marcadas' | 'descartadas' | 'other';
 }
 
-export function nextPipelineStatus(status: Lead['status']) {
-  return nextPipelineStatusJs(status) as '' | 'processing' | 'scheduled';
-}
-
 export function toE164(phone: string) {
   return toE164Js(phone) as string;
 }
@@ -73,7 +68,7 @@ export function formatPhoneDisplay(phone: string) {
 }
 
 export function pipelineTone(status: Lead['status']) {
-  return pipelineToneJs(status) as '' | 'yellow' | 'green' | 'red';
+  return pipelineToneJs(status) as '' | 'yellow' | 'green' | 'red' | 'blue';
 }
 
 export function pipelineStats(leads: Lead[]) {

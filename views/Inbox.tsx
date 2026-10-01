@@ -2,9 +2,9 @@ import React, { useMemo, useState } from 'react';
 import LeadName from '../components/LeadName';
 import LeadPhone from '../components/LeadPhone';
 import LeadRowMain from '../components/LeadRowMain';
-import StatusMove from '../components/StatusMove';
+import StatusChoices, { HypothesisStatus } from '../components/StatusChoices';
 import { Lead } from '../types';
-import { filledLeadFields, listBucket, listStatusCopy, nextPipelineStatus, sortLeadsNewestFirst } from '../utils';
+import { filledLeadFields, listBucket, listStatusCopy, sortLeadsNewestFirst } from '../utils';
 
 interface InboxProps {
   leads: Lead[];
@@ -37,7 +37,9 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
 
   const statusLabel = (status: Lead['status']) => {
     if (status === 'new') return 'Novo';
-    if (status === 'contacted' || status === 'processing') return 'Em processamento';
+    if (status === 'processing') return 'Não atendeu';
+    if (status === 'contacted') return 'Contactada';
+    if (status === 'positive') return 'Pré-qualificado';
     if (status === 'scheduled') return 'Marcada';
     if (status === 'discarded') return 'Descartada';
     return status;
@@ -66,16 +68,22 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
 
   const close = () => setActiveModal('none');
 
-  const submitComment = () => {
-    if (!selectedLead) return;
-    onUpdateStatus(selectedLead.id, { status: 'contacted', notes: comment }, { comentario: comment });
-    close();
+  const patchLead = (lead: Lead, patch: Partial<Lead>) => {
+    setSelectedLead((current) => (current && current.id === lead.id ? { ...current, ...patch } : current));
   };
 
-  const submitMissed = () => {
-    if (!selectedLead) return;
-    onUpdateStatus(selectedLead.id, { status: 'processing', isContacted: true }, { status: 'processing' });
-    close();
+  const chooseStatus = (lead: Lead, next: HypothesisStatus) => {
+    if (next === 'scheduled') {
+      open('schedule', lead);
+      return;
+    }
+    if (next === 'discarded') {
+      open('discard', lead);
+      return;
+    }
+    onUpdateStatus(lead.id, { status: next, isContacted: true }, { status: next });
+    setSelectedLead((current) => (current && current.id === lead.id ? { ...current, status: next, isContacted: true } : current));
+    setActiveModal((current) => (selectedLead && selectedLead.id === lead.id && current !== 'none' ? 'comment' : current));
   };
 
   const submitDiscard = () => {
@@ -87,7 +95,8 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
       { status: 'discarded', discardReason: motivo },
       { status: 'discarded', motivo }
     );
-    close();
+    patchLead(selectedLead, { status: 'discarded', discardReason: motivo });
+    setActiveModal('comment');
   };
 
   const submitSchedule = () => {
@@ -97,12 +106,8 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
       { status: 'scheduled', doctor: selectedDoctor, appointmentDate, notes: comment },
       { medico: selectedDoctor, data_consulta: appointmentDate, status: 'scheduled', comentario: comment }
     );
-    close();
-  };
-
-  const moveStatus = (lead: Lead, next: 'processing' | 'scheduled') => {
-    onUpdateStatus(lead.id, { status: next, isContacted: true }, { status: next });
-    setSelectedLead((current) => (current && current.id === lead.id ? { ...current, status: next, isContacted: true } : current));
+    patchLead(selectedLead, { status: 'scheduled', doctor: selectedDoctor, appointmentDate, isContacted: true });
+    setActiveModal('comment');
   };
 
   return (
@@ -133,10 +138,9 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
         </p>
       ) : (
         <div className="list">
-          {visible.map((lead) => {
-            const next = nextPipelineStatus(lead.status);
-            return (
-              <div key={lead.id} className="row">
+          {visible.map((lead) => (
+            <div key={lead.id} className="row stack">
+              <div className="row-line">
                 <LeadRowMain
                   lead={lead}
                   onOpen={() => open('comment', lead)}
@@ -146,22 +150,27 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
                       : `${lead.source || 'Local'} · ${timeAgo(lead.timestamp)}`
                   }
                 />
-                <span className="row-side">
-                  <span className="row-status">{statusLabel(lead.status)}</span>
-                  {next ? (
-                    <StatusMove status={lead.status} disabled={isSyncing} onMove={(target) => moveStatus(lead, target)} />
-                  ) : null}
-                </span>
+                <span className="row-status">{statusLabel(lead.status)}</span>
               </div>
-            );
-          })}
+              <StatusChoices
+                status={lead.status}
+                disabled={isSyncing}
+                variant="row"
+                onChoose={(next) => chooseStatus(lead, next)}
+              />
+            </div>
+          ))}
         </div>
       )}
 
       {selectedLead && activeModal !== 'none' && activeModal !== 'create' && (
         <div className="sheet open">
           <div className="inner">
-            <button type="button" className="back" onClick={close}>
+            <button
+              type="button"
+              className="back"
+              onClick={() => (activeModal === 'comment' ? close() : setActiveModal('comment'))}
+            >
               ← Voltar
             </button>
             <h1 className="page-title">
@@ -173,31 +182,11 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
             <LeadFormFields lead={selectedLead} />
 
             {activeModal === 'comment' && (
-              <>
-                <StatusMove
-                  status={selectedLead.status}
-                  disabled={isSyncing}
-                  className="cta sec"
-                  phrase
-                  onMove={(next) => moveStatus(selectedLead, next)}
-                />
-                <label className="field">
-                  Nota
-                  <textarea className="field" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="O que foi acordado?" />
-                </label>
-                <button type="button" className="cta" onClick={submitComment}>
-                  Marcar contactada
-                </button>
-                <button type="button" className="cta sec" onClick={submitMissed}>
-                  Não atendeu
-                </button>
-                <button type="button" className="cta sec" onClick={() => setActiveModal('schedule')}>
-                  Agendar
-                </button>
-                <button type="button" className="cta sec" onClick={() => setActiveModal('discard')}>
-                  Descartar
-                </button>
-              </>
+              <StatusChoices
+                status={selectedLead.status}
+                disabled={isSyncing}
+                onChoose={(next) => chooseStatus(selectedLead, next)}
+              />
             )}
 
             {activeModal === 'discard' && (
@@ -206,7 +195,7 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
                   Motivo
                   <textarea className="field" value={comment} onChange={(e) => setComment(e.target.value)} placeholder="Porque vai descartar?" />
                 </label>
-                <button type="button" className="cta" disabled={!comment.trim()} onClick={submitDiscard}>
+                <button type="button" className="cta" disabled={!comment.trim() || isSyncing} onClick={submitDiscard}>
                   Confirmar descarte
                 </button>
               </>
@@ -255,7 +244,7 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
                   Notas
                   <textarea className="field" value={comment} onChange={(e) => setComment(e.target.value)} />
                 </label>
-                <button type="button" className="cta" disabled={!selectedDoctor || !appointmentDate} onClick={submitSchedule}>
+                <button type="button" className="cta" disabled={!selectedDoctor || !appointmentDate || isSyncing} onClick={submitSchedule}>
                   Confirmar marcação
                 </button>
               </>

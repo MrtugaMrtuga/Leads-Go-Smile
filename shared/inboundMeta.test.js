@@ -12,7 +12,6 @@ import {
   listBucket,
   mapDataToLeads,
   mapSheetCsv,
-  nextPipelineStatus,
   pipelineBreakdown,
   pipelineStats,
   pipelineTone,
@@ -208,6 +207,26 @@ test('Estado and não atendeu stay in the inbox as processing', () => {
   assert.equal(booked.status, 'scheduled');
   assert.equal(listBucket(booked.status), 'marcadas');
   assert.equal(pipelineTone(booked.status), 'green');
+
+  const [qualified] = mapSheetCsv(
+    toCsv([
+      ['Nome', 'Estado'],
+      ['Rita Pré', 'Pré-qualificado'],
+    ])
+  );
+  assert.equal(qualified.status, 'positive');
+  assert.equal(listBucket(qualified.status), 'inbox');
+  assert.equal(pipelineTone(qualified.status), 'blue');
+
+  const [missed] = mapSheetCsv(
+    toCsv([
+      ['Nome', 'Estado'],
+      ['Nuno Silêncio', 'Não atendeu'],
+    ])
+  );
+  assert.equal(missed.status, 'processing');
+  assert.equal(listBucket(missed.status), 'inbox');
+  assert.equal(pipelineTone(missed.status), 'yellow');
 });
 
 test('old Inbound META headers still map onto the historical columns', () => {
@@ -260,12 +279,13 @@ test('estatísticas are percentages of every lead', () => {
   assert.equal(byLabel.Concluídas.count, 1);
   assert.equal(byLabel.Contactadas, undefined);
   assert.equal(listBucket('processing'), 'inbox');
+  assert.equal(listBucket('positive'), 'inbox');
   assert.equal(listBucket('scheduled') === 'inbox', false);
-  assert.equal(nextPipelineStatus('scheduled'), 'processing');
-  assert.equal(nextPipelineStatus('processing'), 'scheduled');
-  assert.equal(nextPipelineStatus('contacted'), 'scheduled');
-  assert.equal(nextPipelineStatus('new'), '');
-  assert.equal(nextPipelineStatus('discarded'), '');
+  assert.equal(listBucket('discarded'), 'descartadas');
+  assert.equal(pipelineTone('processing'), 'yellow');
+  assert.equal(pipelineTone('positive'), 'blue');
+  assert.equal(pipelineTone('discarded'), 'red');
+  assert.equal(pipelineTone('scheduled'), 'green');
 });
 
 test('fecho date is read from the column or the Comentários marker', () => {

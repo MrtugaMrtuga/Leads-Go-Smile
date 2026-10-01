@@ -37,10 +37,14 @@ test('lead list screens link the phone with tel and never WhatsApp', () => {
     '../views/Accounts.tsx',
     '../views/Admin.tsx',
     '../components/LeadPhone.tsx',
-    '../components/StatusMove.tsx',
+    '../components/StatusChoices.tsx',
   ];
   const source = files.map((file) => readFileSync(new URL(file, import.meta.url), 'utf8')).join('\n');
   assert.match(source, /LeadPhone/);
-  assert.match(source, /nextPipelineStatus|Passar a/);
+  assert.match(source, /Marcada/);
+  assert.match(source, /Descartada/);
+  assert.match(source, /Não atendeu/);
+  assert.match(source, /Pré-qualificado/);
+  assert.match(source, /Desmarcar/);
   assert.doesNotMatch(source, /wa\.me|api\.whatsapp|whatsapp:/i);
 });

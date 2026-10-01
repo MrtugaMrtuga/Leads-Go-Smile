@@ -67,6 +67,30 @@ test('não atendeu marks processing and writes Estado', () => {
   assert.equal(patch.fields.find((field) => field.header === 'Data fecho').value, '');
 });
 
+test('pré-qualificado writes Estado and does not touch the booking', () => {
+  const patch = leadPatchToFields({ status: 'positive' }, NOW);
+  assert.equal(patch.status, 'positive');
+  assert.equal(patch.noteSet, false);
+  assert.equal(patch.motivoSet, false);
+  assert.equal(patch.fields.find((field) => field.header === 'Estado').value, 'Pré-qualificado');
+  assert.equal(patch.fields.some((field) => field.header === 'Data Primeira Consulta'), false);
+  assert.equal(patch.fields.some((field) => field.header === 'Médico'), false);
+});
+
+test('desmarcar clears the booking and discards without FALTOU', () => {
+  const patch = leadPatchToFields(
+    { status: 'discarded', doctor: '', appointmentDate: '', motivo: 'Desmarcada' },
+    NOW
+  );
+  assert.equal(patch.status, 'discarded');
+  assert.equal(patch.motivo, 'Desmarcada');
+  assert.equal(patch.noteSet, false);
+  assert.equal(patch.note.includes('FALTOU'), false);
+  assert.equal(patch.fields.find((field) => field.header === 'Médico').value, '');
+  assert.equal(patch.fields.find((field) => field.header === 'Data Primeira Consulta').value, '');
+  assert.equal(patch.fields.find((field) => field.header === 'Estado').value, 'Descartada');
+});
+
 test('free move Marcada ↔ Em processamento writes only the pipeline columns', () => {
   const back = leadPatchToFields({ status: 'processing' }, NOW);
   assert.equal(back.status, 'processing');

@@ -1168,6 +1168,65 @@ test('inbox and marcações list every loaded lead, not the selected month', () 
   assert.match(app, /allLeads=\{leads\}/);
 });
 
+test('desmarcar posts a cleared booking into Descartadas and não atendeu stays processing', async () => {
+  process.env.APPS_SCRIPT_URL = 'https://script.google.com/macros/s/deploy/exec';
+  process.env.APPS_SCRIPT_SECRET = SECRET;
+  let posted = null;
+  const app = createApp();
+  const values = [...IDA_VALUES];
+  values[6] = '[status:discarded]\n[motivo:Desmarcada]';
+  values[7] = 'Descartada';
+  await withFetch(async (_url, init) => {
+    if (init.method === 'POST') posted = JSON.parse(init.body);
+    return new Response(JSON.stringify({ ok: true, headers: HEADERS, row: { row: 2, values } }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  }, async () => {
+    const response = await call(app, 'PATCH', '/api/leads/2', {
+      status: 'discarded',
+      doctor: '',
+      appointmentDate: '',
+      motivo: 'Desmarcada',
+    });
+    assert.equal(response.status, 200);
+    assert.equal(response.json.status, 'discarded');
+    assert.equal(response.json.discardReason, 'Desmarcada');
+  });
+  assert.equal(posted.status, 'discarded');
+  assert.equal(posted.motivo, 'Desmarcada');
+  assert.equal(posted.noteSet, false);
+  assert.equal(posted.fields.find((field) => field.header === 'Médico').value, '');
+  assert.equal(posted.fields.find((field) => field.header === 'Data Primeira Consulta').value, '');
+  assert.equal(posted.fields.find((field) => field.header === 'Estado').value, 'Descartada');
+  assert.equal(JSON.stringify(posted).includes('FALTOU'), false);
+});
+
+test('inbox and marcações can move a lead to any of the four states', () => {
+  const inbox = readFileSync(new URL('../views/Inbox.tsx', import.meta.url), 'utf8');
+  const agenda = readFileSync(new URL('../views/Agenda.tsx', import.meta.url), 'utf8');
+  const choices = readFileSync(new URL('../components/StatusChoices.tsx', import.meta.url), 'utf8');
+  assert.match(choices, /Marcada/);
+  assert.match(choices, /Descartada/);
+  assert.match(choices, /Não atendeu/);
+  assert.match(choices, /Pré-qualificado/);
+  assert.match(choices, /accent: 'red'/);
+  assert.match(choices, /accent: 'yellow'/);
+  assert.match(choices, /accent: 'blue'/);
+  assert.match(choices, /tone-\$\{item\.accent\}/);
+  assert.match(inbox, /StatusChoices/);
+  assert.match(agenda, /StatusChoices/);
+  assert.match(agenda, />\s*Desmarcar\s*</);
+  assert.match(agenda, /motivo: 'Desmarcada'/);
+  assert.match(agenda, /doctor: ''/);
+  assert.match(agenda, /appointmentDate: ''/);
+  assert.match(agenda, /status: 'discarded'/);
+  assert.match(agenda, /comentario: 'FALTOU'/);
+  assert.doesNotMatch(inbox, /nextPipelineStatus|StatusMove|Marcar contactada/);
+  assert.doesNotMatch(agenda, /nextPipelineStatus|StatusMove/);
+  assert.doesNotMatch(choices, /nextPipelineStatus/);
+});
+
 test('inbox menu keeps Descartadas and leaves scheduled leads on the dock', () => {
   const inbox = readFileSync(new URL('../views/Inbox.tsx', import.meta.url), 'utf8');
   const dock = readFileSync(new URL('../constants.tsx', import.meta.url), 'utf8');

@@ -71,7 +71,7 @@ const CARLA_EMAIL_NOTE = /^\[carla-email:sent\]\s*/i;
 
 const OTHER_STATUS_LABELS = {
   new: 'Novas',
-  positive: 'Positivas',
+  positive: 'Pré-qualificado',
   completed: 'Concluídas',
   paid: 'Pagas',
 };
@@ -187,6 +187,8 @@ export function statusFromEstado(value) {
   if (folded === 'nova' || folded === 'novo' || folded === 'new') return 'new';
   if (folded === 'contactada' || folded === 'contactado' || folded === 'contacted') return 'contacted';
   if (folded === 'positiva' || folded === 'positivo' || folded === 'positive') return 'positive';
+  if (folded === 'pre-qualificado' || folded === 'prequalificado') return 'positive';
+  if (folded === 'nao atendeu' || folded === 'nao atende') return 'processing';
   return '';
 }
 
@@ -194,6 +196,7 @@ export function legendaForStatus(status) {
   if (status === 'processing' || status === 'contacted') return 'Em processamento';
   if (status === 'scheduled') return 'Marcada';
   if (status === 'discarded') return 'Descartada';
+  if (status === 'positive') return 'Pré-qualificado';
   if (status === 'new') return '';
   return null;
 }
@@ -201,21 +204,15 @@ export function legendaForStatus(status) {
 export function listBucket(status) {
   if (status === 'scheduled') return 'marcadas';
   if (status === 'discarded') return 'descartadas';
-  if (status === 'new' || status === 'contacted' || status === 'processing') return 'inbox';
+  if (status === 'new' || status === 'contacted' || status === 'processing' || status === 'positive') return 'inbox';
   return 'other';
-}
-
-/** One tap between Marcada and Em processamento. Other statuses are not part of this move. */
-export function nextPipelineStatus(status) {
-  if (status === 'scheduled') return 'processing';
-  if (status === 'processing' || status === 'contacted') return 'scheduled';
-  return '';
 }
 
 export function pipelineTone(status) {
   if (status === 'discarded') return 'red';
   if (status === 'scheduled') return 'green';
   if (status === 'processing' || status === 'contacted') return 'yellow';
+  if (status === 'positive') return 'blue';
   return '';
 }
 
