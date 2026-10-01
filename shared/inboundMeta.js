@@ -916,6 +916,88 @@ export function sortLeadsNewestFirst(leads) {
   return [...(Array.isArray(leads) ? leads : [])].sort(compareLeadsNewestFirst);
 }
 
+function pad2(value) {
+  return String(value).padStart(2, '0');
+}
+
+/** Clock written on the cell, or Europe/Lisbon when the value is a zoned instant. */
+function wallClock(value) {
+  const text = String(value ?? '').trim();
+  if (!text || !/\d{1,2}:\d{2}/.test(text)) return '';
+  const zoned = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(text);
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
+  if (iso && iso[4] && !zoned) return `${iso[4]}:${iso[5]}`;
+  const pt = text.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{2,4})(?:[,\s]+(\d{1,2}):(\d{2}))?/);
+  if (pt && pt[4]) return `${pad2(pt[4])}:${pt[5]}`;
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return '';
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Lisbon',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(date);
+  let hour = parts.find((part) => part.type === 'hour')?.value || '00';
+  if (hour === '24') hour = '00';
+  const minute = parts.find((part) => part.type === 'minute')?.value || '00';
+  return `${hour}:${minute}`;
+}
+
+/**
+ * Sortable Lisbon wall time for Data Primeira Consulta.
+ * Unzoned ISO and Portuguese day-first dates keep the written day and clock.
+ * Instants with Z or an offset convert to Europe/Lisbon. Date-only values sort as 00:00.
+ */
+function appointmentChronoKey(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return '';
+  const zoned = /[zZ]$|[+-]\d{2}:?\d{2}$/.test(text);
+  const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{2}):(\d{2}))?/);
+  if (iso && !zoned) return `${iso[1]}-${iso[2]}-${iso[3]}T${iso[4] || '00'}:${iso[5] || '00'}`;
+  const pt = text.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})(?:[,\s]+(\d{1,2}):(\d{2}))?/);
+  if (pt) {
+    const day = Number(pt[1]);
+    const month = Number(pt[2]);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return '';
+    const hour = pt[4] ? pad2(pt[4]) : '00';
+    const minute = pt[5] ? pad2(pt[5]) : '00';
+    return `${pt[3]}-${pad2(pt[2])}-${pad2(pt[1])}T${hour}:${minute}`;
+  }
+  const day = contactDayFromText(text);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return '';
+  return `${day}T${wallClock(text) || '00:00'}`;
+}
+
+function contactChronoKey(lead) {
+  const day = leadContactDay(lead) || contactDayFromText(lead?.dataContacto || lead?.timestamp || '');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) return '';
+  const raw = lead?.timestamp || lead?.dataContacto || '';
+  const stampDay = contactDayFromText(raw);
+  const clock = stampDay === day ? wallClock(raw) : '';
+  return `${day}T${clock || '00:00'}`;
+}
+
+function marcacaoSortKey(lead) {
+  return appointmentChronoKey(lead?.appointmentDate) || contactChronoKey(lead);
+}
+
+/** Earliest appointment first. Without Data Primeira Consulta, contact day then timestamp. Undated last. */
+export function compareMarcacoesChronological(a, b) {
+  const keyA = marcacaoSortKey(a);
+  const keyB = marcacaoSortKey(b);
+  if (Boolean(keyA) !== Boolean(keyB)) return keyA ? -1 : 1;
+  if (keyA !== keyB) return keyA < keyB ? -1 : 1;
+  const byTime = leadSortTime(a) - leadSortTime(b);
+  if (byTime) return byTime;
+  const byRow = leadSortRow(a) - leadSortRow(b);
+  if (byRow) return byRow;
+  return String(a?.id || '').localeCompare(String(b?.id || ''));
+}
+
+export function sortMarcacoesChronological(leads) {
+  return [...(Array.isArray(leads) ? leads : [])].sort(compareMarcacoesChronological);
+}
+
 export function mapDataToLeads(data) {
   if (!Array.isArray(data)) return [];
   return data

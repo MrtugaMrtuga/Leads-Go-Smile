@@ -4,20 +4,19 @@ import LeadPhone from '../components/LeadPhone';
 import LeadRowMain from '../components/LeadRowMain';
 import StatusMove from '../components/StatusMove';
 import { Lead } from '../types';
-import { formatCurrency, listStatusCopy, sortLeadsNewestFirst } from '../utils';
+import { formatCurrency, listStatusCopy, sortMarcacoesChronological } from '../utils';
 
 interface AgendaProps {
   leads: Lead[];
   onUpdateStatus: (id: string, updates: Partial<Lead>, extraData?: any) => void;
   onSendReminder: (lead: Lead) => void;
   onSync: () => void;
-  monthLabel: string;
   isSyncing?: boolean;
   isLoading?: boolean;
   listSettled?: boolean;
 }
 
-const Agenda: React.FC<AgendaProps> = ({ leads, onUpdateStatus, onSendReminder, monthLabel, isSyncing, isLoading, listSettled }) => {
+const Agenda: React.FC<AgendaProps> = ({ leads, onUpdateStatus, onSendReminder, isSyncing, isLoading, listSettled }) => {
   const [selected, setSelected] = useState<Lead | null>(null);
   const [budget, setBudget] = useState('');
 
@@ -38,11 +37,11 @@ const Agenda: React.FC<AgendaProps> = ({ leads, onUpdateStatus, onSendReminder, 
       {isLoading && leads.length > 0 ? <p className="updating">A atualizar…</p> : null}
       {leads.length === 0 ? (
         <p className="center-note">
-          {listStatusCopy(isLoading, listSettled, `Nenhuma lead marcada em ${monthLabel.toLowerCase()}.`)}
+          {listStatusCopy(isLoading, listSettled, 'Nenhuma lead marcada.')}
         </p>
       ) : (
         <div>
-          {sortLeadsNewestFirst(leads).map((lead) => (
+          {sortMarcacoesChronological(leads).map((lead) => (
             <div key={lead.id} className="day-line">
               <button type="button" className="day-line-when row-hit" onClick={() => { setSelected(lead); setBudget(''); }}>
                 {formatWhen(lead.appointmentDate)}

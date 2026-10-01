@@ -17,6 +17,7 @@ import {
   pipelineStats,
   pipelineTone,
   sortLeadsNewestFirst,
+  sortMarcacoesChronological,
   syncLeadKey,
 } from './inboundMeta.js';
 
@@ -361,6 +362,21 @@ test('lead lists put the newest Data Contacto first', () => {
   assert.deepEqual(
     sorted.map((lead) => lead.name),
     ['Mais recente', 'Mesmo instante, linha menor', 'Mais cedo no dia', 'Antiga', 'Sem data']
+  );
+});
+
+test('marcações list the earliest appointment first, then contact day', () => {
+  const sorted = sortMarcacoesChronological([
+    { id: '3', name: 'Outubro', appointmentDate: '2026-10-02T09:00', timestamp: '2026-09-01T10:00:00.000Z', contactDay: '2026-09-01' },
+    { id: '2', name: 'Tarde', appointmentDate: '2026-09-22T18:30', timestamp: '2026-09-02T10:00:00.000Z', contactDay: '2026-09-02' },
+    { id: '1', name: 'Manhã', appointmentDate: '22/09/2026 09:00', timestamp: '2026-10-01T10:00:00.000Z', contactDay: '2026-10-01' },
+    { id: '4', name: 'Sem consulta', appointmentDate: '', timestamp: '2026-09-20T17:14:04.000Z', contactDay: '2026-09-20' },
+    { id: '5', name: 'Sem data', appointmentDate: '', timestamp: '', contactDay: '' },
+    { id: '6', name: 'Lisboa', appointmentDate: '2026-09-22T17:00:00.000Z', timestamp: '2026-09-03T10:00:00.000Z', contactDay: '2026-09-03' },
+  ]);
+  assert.deepEqual(
+    sorted.map((lead) => lead.name),
+    ['Sem consulta', 'Manhã', 'Lisboa', 'Tarde', 'Outubro', 'Sem data']
   );
 });
 

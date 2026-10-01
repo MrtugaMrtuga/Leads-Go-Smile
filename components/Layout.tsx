@@ -60,7 +60,7 @@ const Layout: React.FC<LayoutProps> = ({
       <h1 className="page-title">{title}</h1>
       {subtitle && <p className="sub">{subtitle}</p>}
 
-      {activeView !== 'admin' && activeView !== 'inbox' && activeView !== 'resumo' && (
+      {activeView !== 'admin' && activeView !== 'inbox' && activeView !== 'resumo' && activeView !== 'visitas' && (
         <div className="month-nav">
           <button type="button" onClick={onPrevMonth} aria-label="Mês anterior">
             ←

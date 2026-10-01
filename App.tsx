@@ -220,7 +220,7 @@ const App: React.FC = () => {
       case 'inbox':
         return (
           <Inbox
-            leads={currentLeads}
+            leads={leads}
             onUpdateStatus={handleLeadAction}
             onCreateLead={handleCreateLead}
             onSync={loadLeads}
@@ -245,11 +245,10 @@ const App: React.FC = () => {
       case 'visitas':
         return (
           <Agenda
-            leads={currentLeads.filter((l) => l.status === 'scheduled')}
+            leads={leads.filter((l) => l.status === 'scheduled')}
             onUpdateStatus={handleLeadAction}
             onSendReminder={handleSendReminder}
             onSync={loadLeads}
-            monthLabel={monthLabel}
             isSyncing={isSyncing}
             isLoading={isLoading}
             listSettled={listSettled}

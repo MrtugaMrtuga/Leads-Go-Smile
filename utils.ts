@@ -12,6 +12,7 @@ import {
   pipelineStats as pipelineStatsJs,
   pipelineTone as pipelineToneJs,
   sortLeadsNewestFirst as sortLeadsNewestFirstJs,
+  sortMarcacoesChronological as sortMarcacoesChronologicalJs,
 } from './shared/inboundMeta.js';
 import { formatPhoneDisplay as formatPhoneDisplayJs, toE164 as toE164Js, toTelHref as toTelHrefJs } from './shared/phone.js';
 
@@ -25,6 +26,19 @@ export function mapDataToLeads(data: unknown[]): Lead[] {
 
 export function sortLeadsNewestFirst<T extends { timestamp?: string; dataContacto?: string; id?: string; row?: number | null }>(leads: T[]): T[] {
   return sortLeadsNewestFirstJs(leads) as T[];
+}
+
+export function sortMarcacoesChronological<
+  T extends {
+    appointmentDate?: string;
+    timestamp?: string;
+    dataContacto?: string;
+    contactDay?: string;
+    id?: string;
+    row?: number | null;
+  },
+>(leads: T[]): T[] {
+  return sortMarcacoesChronologicalJs(leads) as T[];
 }
 
 /** Empty copy is only for a finished fetch that really returned zero rows. */
