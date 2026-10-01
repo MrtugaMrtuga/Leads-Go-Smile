@@ -1,10 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import LeadName from '../components/LeadName';
 import LeadPhone from '../components/LeadPhone';
 import LeadRowMain from '../components/LeadRowMain';
 import StatusMove from '../components/StatusMove';
 import { Lead } from '../types';
-import { filledLeadFields, listBucket, listStatusCopy, nextPipelineStatus, sortLeadsNewestFirst } from '../utils';
+import { filledLeadFields, filterListedLeads, listStatusCopy, nextPipelineStatus, sortLeadsNewestFirst } from '../utils';
 
 interface InboxProps {
   leads: Lead[];
@@ -22,6 +22,8 @@ type ModalType = 'none' | 'comment' | 'discard' | 'schedule' | 'create';
 
 const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSyncing, isLoading, listSettled }) => {
   const [filter, setFilter] = useState<Filter>('inbox');
+  const [query, setQuery] = useState('');
+  const searchRef = useRef<HTMLInputElement>(null);
   const [activeModal, setActiveModal] = useState<ModalType>('none');
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [newLead, setNewLead] = useState({ name: '', phone: '', email: '', notes: '' });
@@ -30,9 +32,10 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
   const [selectedDoctor, setSelectedDoctor] = useState('');
   const [isOrto, setIsOrto] = useState(false);
 
+  const searching = query.trim().length > 0;
   const visible = useMemo(
-    () => sortLeadsNewestFirst(leads.filter((lead) => listBucket(lead.status) === filter)),
-    [leads, filter]
+    () => sortLeadsNewestFirst(filterListedLeads(leads, filter, query)),
+    [leads, filter, query]
   );
 
   const statusLabel = (status: Lead['status']) => {
@@ -105,8 +108,49 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
     setSelectedLead((current) => (current && current.id === lead.id ? { ...current, status: next, isContacted: true } : current));
   };
 
+  const clearSearch = () => {
+    setQuery('');
+    searchRef.current?.focus();
+  };
+
   return (
     <div>
+      <form className="lead-search" role="search" onSubmit={(event) => event.preventDefault()}>
+        <svg className="lead-search-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+          <circle cx="11" cy="11" r="7" />
+          <path d="M20 20l-3.5-3.5" />
+        </svg>
+        <input
+          ref={searchRef}
+          id="lead-search"
+          className="lead-search-input"
+          type="search"
+          inputMode="search"
+          enterKeyHint="search"
+          placeholder="Pesquisar"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
+          value={query}
+          aria-label="Pesquisar leads"
+          aria-controls="lead-list"
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        {query ? (
+          <button type="button" className="lead-search-clear" aria-label="Limpar pesquisa" onClick={clearSearch}>
+            ×
+          </button>
+        ) : null}
+      </form>
+      <p className="visually-hidden" aria-live="polite">
+        {searching
+          ? visible.length === 0
+            ? 'Nenhuma lead corresponde à pesquisa.'
+            : `${visible.length} ${visible.length === 1 ? 'resultado' : 'resultados'}`
+          : ''}
+      </p>
+
       <div className="filters">
         <button type="button" className={`filter${filter === 'inbox' ? ' is-on' : ''}`} onClick={() => setFilter('inbox')}>
           Inbox
@@ -123,40 +167,44 @@ const Inbox: React.FC<InboxProps> = ({ leads, onUpdateStatus, onCreateLead, isSy
       </div>
 
       {isLoading && visible.length > 0 ? <p className="updating">A atualizar…</p> : null}
-      {visible.length === 0 ? (
-        <p className="center-note">
-          {listStatusCopy(
-            isLoading,
-            listSettled,
-            filter === 'descartadas' ? 'Nenhuma lead descartada.' : 'Nenhuma lead na inbox.'
-          )}
-        </p>
-      ) : (
-        <div className="list">
-          {visible.map((lead) => {
-            const next = nextPipelineStatus(lead.status);
-            return (
-              <div key={lead.id} className="row">
-                <LeadRowMain
-                  lead={lead}
-                  onOpen={() => open('comment', lead)}
-                  sub={
-                    lead.status === 'discarded' && lead.discardReason
-                      ? lead.discardReason
-                      : `${lead.source || 'Local'} · ${timeAgo(lead.timestamp)}`
-                  }
-                />
-                <span className="row-side">
-                  <span className="row-status">{statusLabel(lead.status)}</span>
-                  {next ? (
-                    <StatusMove status={lead.status} disabled={isSyncing} onMove={(target) => moveStatus(lead, target)} />
-                  ) : null}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <div id="lead-list">
+        {visible.length === 0 ? (
+          <p className="center-note">
+            {searching && (listSettled || leads.length > 0)
+              ? 'Nenhuma lead corresponde à pesquisa.'
+              : listStatusCopy(
+                  isLoading,
+                  listSettled,
+                  filter === 'descartadas' ? 'Nenhuma lead descartada.' : 'Nenhuma lead na inbox.'
+                )}
+          </p>
+        ) : (
+          <div className="list">
+            {visible.map((lead) => {
+              const next = nextPipelineStatus(lead.status);
+              return (
+                <div key={lead.id} className="row">
+                  <LeadRowMain
+                    lead={lead}
+                    onOpen={() => open('comment', lead)}
+                    sub={
+                      lead.status === 'discarded' && lead.discardReason
+                        ? lead.discardReason
+                        : `${lead.source || 'Local'} · ${timeAgo(lead.timestamp)}`
+                    }
+                  />
+                  <span className="row-side">
+                    <span className="row-status">{statusLabel(lead.status)}</span>
+                    {next ? (
+                      <StatusMove status={lead.status} disabled={isSyncing} onMove={(target) => moveStatus(lead, target)} />
+                    ) : null}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       {selectedLead && activeModal !== 'none' && activeModal !== 'create' && (
         <div className="sheet open">
