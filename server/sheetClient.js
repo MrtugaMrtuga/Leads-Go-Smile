@@ -62,7 +62,7 @@ function leadFromPayload(payload) {
 
 const GAS_TIMEOUT_MS = Number(process.env.APPS_SCRIPT_TIMEOUT_MS || 55000);
 const GAS_RETRIES = Number(process.env.APPS_SCRIPT_RETRIES || 2);
-const DEFAULT_LIST_TTL_MS = 45_000;
+const DEFAULT_LIST_TTL_MS = 300_000;
 
 function isTransientFetchError(error) {
   const name = String(error?.name || '');
@@ -671,7 +671,7 @@ export async function createInboundLead(input, options = {}) {
   return lead;
 }
 
-const DEFAULT_WARM_MS = 180_000;
+const DEFAULT_WARM_MS = 60_000;
 
 export function sheetWarmerConfig(env = process.env) {
   const raw = env.LEADS_WARM_MS;

@@ -1059,7 +1059,11 @@ test('the inbox hydrates a saved list and does not treat the first paint as empt
   const cache = readFileSync(new URL('../leadCache.ts', import.meta.url), 'utf8');
   const copy = readFileSync(new URL('../utils.ts', import.meta.url), 'utf8');
   const server = readFileSync(new URL('./sheetClient.js', import.meta.url), 'utf8');
-  assert.match(app, /useState\(true\)/);
+  assert.match(app, /useState\(\(\) => readCachedLeads\(\) === null\)/);
+  const loadStart = app.indexOf('const loadLeads');
+  const loadFn = app.slice(loadStart, app.indexOf('useEffect', loadStart));
+  assert.match(loadFn, /paintedFromCache = readCachedLeads\(\) !== null/);
+  assert.match(loadFn, /if \(!paintedFromCache\) setIsLoading\(true\)/);
   assert.match(app, /readCachedLeads/);
   assert.match(app, /writeCachedLeads/);
   assert.match(app, /fetchLeads\(\{ fresh: true \}\)/);
@@ -1090,7 +1094,7 @@ test('refresh uses the Apps Script cache, the warmer refills leads, and sync doe
   assert.doesNotMatch(leadsBranch, /readTable_/);
   const readFn = gas.slice(gas.indexOf('function readLeadsTable_'), gas.indexOf('function readHeaderAndRow_'));
   assert.match(gas, /function readLeadsTable_/);
-  assert.match(gas, /LEADS_CACHE_TTL_SEC = 60/);
+  assert.match(gas, /LEADS_CACHE_TTL_SEC = 300/);
   assert.match(gas, /function listColumnCount_/);
   assert.match(gas, /rowsOmitted: true/);
   assert.doesNotMatch(gas, /leadsOmitted/);
@@ -1118,12 +1122,14 @@ test('refresh uses the Apps Script cache, the warmer refills leads, and sync doe
   assert.match(client, /lane === 'warm'/);
   assert.match(client, /sheetFresh/);
   assert.match(client, /writesInFlight/);
-  assert.match(client, /DEFAULT_WARM_MS = 180_000/);
+  assert.match(client, /DEFAULT_LIST_TTL_MS = 300_000/);
+  assert.match(client, /DEFAULT_WARM_MS = 60_000/);
+  assert.match(client, /intervalMs >= 60_000/);
   assert.match(client, /LEADS_WARM_ACTION \|\| 'leads'/);
   assert.match(client, /noteAppend: patch.noteAppend/);
   assert.match(gas, /noteAppend/);
   assert.match(gas, /body\.noteClear/);
-  assert.match(readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8'), /gosmile-leads-refresh-v3/);
+  assert.match(readFileSync(new URL('../public/sw.js', import.meta.url), 'utf8'), /gosmile-leads-refresh-v4/);
   const inbox = readFileSync(new URL('../views/Inbox.tsx', import.meta.url), 'utf8');
   const agenda = readFileSync(new URL('../views/Agenda.tsx', import.meta.url), 'utf8');
   assert.match(inbox, /lead\?\.notes/);
