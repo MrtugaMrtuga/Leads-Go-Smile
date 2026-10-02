@@ -43,7 +43,8 @@ function persistLeadsAfterPaint(leads: Lead[]) {
 const App: React.FC = () => {
   const [activeView, setActiveView] = useState<AppView>('inbox');
   const [leads, setLeads] = useState<Lead[]>(leadsFromCache);
-  const [isLoading, setIsLoading] = useState(true);
+  // A saved list paints the inbox on the first frame. SWR still runs; it must not cover that list.
+  const [isLoading, setIsLoading] = useState(() => readCachedLeads() === null);
   const [listSettled, setListSettled] = useState(() => readCachedLeads() !== null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -75,7 +76,8 @@ const App: React.FC = () => {
   const loadLeads = useCallback(async () => {
     const serial = ++loadSerial.current;
     const epoch = leadsEpoch.current;
-    setIsLoading(true);
+    const paintedFromCache = readCachedLeads() !== null;
+    if (!paintedFromCache) setIsLoading(true);
     setFetchError(null);
     try {
       const [next, nextSettings, health] = await Promise.all([fetchLeads(), fetchSettings(), fetchHealth()]);

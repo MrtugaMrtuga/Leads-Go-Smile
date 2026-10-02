@@ -14,7 +14,7 @@ PIN de acesso: **2000** (sessionStorage `gosmile-leads-unlocked`).
 
 A Google Sheet continua a ser a única fonte de verdade. `data/leads.json` não é lido. Etiqueta sugerida: `MacMini-leads-swr-v1`.
 
-`GET /api/leads` guarda a última lista boa em memória durante **45s** (`LEADS_CACHE_TTL_MS`; no Mini, 30–60s) e, em paralelo, em `data/leads-cache.json`. Esse ficheiro só acelera o arranque: não se restaura como base e pode apagar-se. Se a cache está dentro do TTL, a resposta sai logo (`X-Leads-Cache: hit`). Se está velha, a resposta sai logo com esses dados (`stale`) e o Mini pede a folha em fundo. Só sem cache nenhuma (arranque a frio) o pedido espera pelo Apps Script (`miss`). A segunda chamada com a cache quente fica abaixo de 1s. `GET /api/leads?fresh=1` espera pela revalidação que já está a correr e, dentro do TTL, continua a ser um `hit`.
+`GET /api/leads` guarda a última lista boa em memória durante **5 min** (`LEADS_CACHE_TTL_MS`, omissão 300000) e, em paralelo, em `data/leads-cache.json`. Esse ficheiro só acelera o arranque: não se restaura como base e pode apagar-se. Se a cache está dentro do TTL, a resposta sai logo (`X-Leads-Cache: hit`). Se está velha, a resposta sai logo com esses dados (`stale`) e o Mini pede a folha em fundo. Só sem cache nenhuma (arranque a frio) o pedido espera pelo Apps Script (`miss`). A segunda chamada com a cache quente fica abaixo de 1s. `GET /api/leads?fresh=1` espera pela revalidação que já está a correr e, dentro do TTL, continua a ser um `hit`.
 
 `POST /api/leads/refresh` relê a folha mesmo dentro do TTL do Mini e responde com a lista e `X-Leads-Cache: refresh`. Não apaga a cache antes do pedido: se já houver uma leitura da folha a correr, espera por essa (uma ida ao Apps Script, não duas) e depois substitui a memória. `data/leads-cache.json` grava-se depois da resposta. Se a folha falhar, a lista anterior mantém-se. No cabeçalho o controlo é um ícone de setas circulares (`aria-label="Atualizar"`), desactivado e a rodar enquanto o pedido vai; esse estado pinta-se no toque, antes do `await`. A lista no browser (`gosmile-leads-swr-v1`) escreve-se depois do paint. O corte mantém-se `2026-09-01`. Etiqueta sugerida: `MacMini-leads-refresh-v3`.
 
@@ -34,17 +34,18 @@ O alvo de **menos de 2–3s** é um Actualizar com **hit** no `CacheService` (`X
 
 O que o script faz agora (publicar **versão nova** do `/exec`, senão o Mini muda e a folha não):
 
-- `action=leads` sem `fresh=1` devolve o JSON filtrado (≥ 2026-09-01) do `CacheService` durante **60s**. Um hit não abre a grelha. `update`, `create` e um sync que inseriu linhas chamam `bumpLeadsCache_`.
-- O Actualizar **não** manda `fresh=1`. Passa pelo Mini (não usa a memória dos 45s) e usa essa cache. `POST /api/leads/refresh?fresh=1` força a leitura, para medir o miss.
+- `action=leads` sem `fresh=1` devolve o JSON filtrado (≥ 2026-09-01) do `CacheService` durante **300s** (5 min). Um hit não abre a grelha. `update`, `create` e um sync que inseriu linhas chamam `bumpLeadsCache_`.
+- O Actualizar **não** manda `fresh=1`. Passa pelo Mini (não usa a memória dos 5 min) e usa essa cache. `POST /api/leads/refresh?fresh=1` força a leitura, para medir o miss.
 - A leitura, quando acontece, é a coluna do timestamp e depois só as colunas mapeadas do bloco do corte (`X-Leads-Columns` vs `X-Leads-Sheet-Columns`). A lista devolve só `leads` (`rowsOmitted`): médico, data da consulta, valor e `contactDay` já vêm no objecto. O Mini usa esse array. `update` e `create` continuam a devolver `headers` + `row`.
-- O Node, a cada **3 minutos** (`LEADS_WARM_MS`, `0` desliga), chama `action=leads` **sem** `fresh=1`. Se o `CacheService` ainda tem a lista, o hit é barato. Se expirou, o script relê a folha e o Mini guarda essa lista, para o GET seguinte não esperar pelo `/exec`. `LEADS_WARM_ACTION=ping` só acorda o script e não enche a cache. O LaunchAgent [deploy/org.evault.leads.warm.plist](./deploy/org.evault.leads.warm.plist) é opcional e só entra se o intervalo do Node estiver desligado.
+- O Node, a cada **60s** (`LEADS_WARM_MS`, omissão 60000; mínimo aceite 60000; `0` desliga), chama `action=leads` **sem** `fresh=1`. O intervalo fica abaixo do TTL de 300s do `CacheService`, por isso o `/exec` costuma responder com hit. Se a cache expirou, o script relê a folha e o Mini guarda essa lista, para o GET seguinte não esperar pelo `/exec`. `LEADS_WARM_ACTION=ping` só acorda o script e não enche a cache. O LaunchAgent [deploy/org.evault.leads.warm.plist](./deploy/org.evault.leads.warm.plist) é opcional e só entra se o intervalo do Node estiver desligado.
 - A leitura não espera pelo sync de Daniel. A fila de leitura é outra. Um refresh não fica atrás de `action=sync`.
 
 Como medir, depois do pull, do restart e da versão nova:
 
 ```bash
 # Hit: X-Leads-Gas-Cache: hit e X-Leads-Gas-Ms por baixo de 3000.
-# Acontece dentro de 60s depois de uma leitura da folha (refresh?fresh=1, ou o warm action=leads quando a cache expirou).
+# Acontece dentro de 300s depois de uma leitura da folha (refresh?fresh=1, ou o warm action=leads quando a cache expirou).
+# O warm por omissão corre a cada 60s, antes desse TTL.
 # LEADS_WARM_ACTION=ping não enche a cache. O warm por omissão é action=leads sem fresh=1.
 curl -sS -D - -o /tmp/leads.json -X POST http://127.0.0.1:3040/api/leads/refresh
 
@@ -55,7 +56,7 @@ curl -sS -D - -o /dev/null -X POST 'http://127.0.0.1:3040/api/leads/refresh?fres
 # Pode voltar às dezenas de segundos. Não contar isso como o alvo.
 ```
 
-`X-Leads-Gas-Age-Ms` é a idade do JSON em cache. Uma gravação pela app zera a cache. Uma edição feita à mão na folha aparece no próximo `fresh=1` ou quando os 60s passam. `X-Leads-Sheet-Read: unknown` quer dizer que o `/exec` ainda é a versão antiga.
+`X-Leads-Gas-Age-Ms` é a idade do JSON em cache. Uma gravação pela app zera a cache. Uma edição feita à mão na folha aparece no próximo `fresh=1` ou quando os 300s passam. `X-Leads-Sheet-Read: unknown` quer dizer que o `/exec` ainda é a versão antiga.
 
 | Estado | Esperado |
 | --- | --- |
@@ -63,11 +64,11 @@ curl -sS -D - -o /dev/null -X POST 'http://127.0.0.1:3040/api/leads/refresh?fres
 | Quente, cache vazia (`?fresh=1` ou TTL a passar) | 3–8s, como no fumo (3,5s / 7,5s / 6,3s) |
 | `/exec` frio | pode voltar aos ~79s |
 
-O log está em `/tmp/evault-leads.out.log` (`gas action=… cache=hit|miss`). A folha continua a ser a fonte de verdade: o hit é uma leitura dessa folha com menos de 60s, invalidada quando a app escreve. O Horário é instantâneo porque lê uma célula (`Config!A1`). A lista de leads não cabe numa célula; o caminho curto é este hit.
+O log está em `/tmp/evault-leads.out.log` (`gas action=… cache=hit|miss`). A folha continua a ser a fonte de verdade: o hit é uma leitura dessa folha com menos de 300s, invalidada quando a app escreve. O Horário é instantâneo porque lê uma célula (`Config!A1`). A lista de leads não cabe numa célula; o caminho curto é este hit.
 
 Sync Daniel → EVOB continua a ler a aba inteira (`readTable_` em `SyncDaniel.gs`). Um delta por timestamp não entrou: a chave da lead é telefone + nome + dia e a folha de Daniel não tem uma coluna de revisão. O Actualizar já não espera por esse sync.
 
-No browser, a última lista boa fica em `localStorage` (`gosmile-leads-swr-v1`). Ao abrir, a inbox mostra essa lista e «A atualizar…». «Nenhuma lead na inbox.» só aparece depois de uma leitura concluída com zero leads.
+No browser, a última lista boa fica em `localStorage` (`gosmile-leads-swr-v1`). Ao abrir, se essa cache existe, a inbox aparece logo e o pedido à rede corre em fundo, sem o ecrã «A atualizar…». Sem cache, o primeiro ecrã fica em «A atualizar…». «Nenhuma lead na inbox.» só aparece depois de uma leitura concluída com zero leads, ou se a cache gravada já era uma lista vazia.
 
 ## Pipeline (Inbox, Marcadas, Descartadas)
 
@@ -143,7 +144,7 @@ O servidor Express serve `dist/` e `/api` na mesma porta. Ver [DEPLOY.md](./DEPL
 | GET | `/api/leads` | Leads da aba Leads (2024 - 2026) com data de contacto >= 2026-09-01. Cache curta no Mini (memória + `data/leads-cache.json`); `?fresh=1` espera a revalidação |
 | POST | `/api/leads/sync` | Corre `action=sync` no Apps Script (Daniel → EVOB) e apaga a cache da lista. O segredo fica no Mini |
 | POST | `/api/leads/refresh` | Pede a lista ao Apps Script (não usa a memória do Mini). Com a cache do script ainda válida responde `X-Leads-Gas-Cache: hit`. `?fresh=1` força a leitura da folha |
-| POST | `/api/leads/warm` | Por omissão `action=leads` sem `fresh=1` (enche a cache se o hit expirou e o Mini fica com essa lista). `LEADS_WARM_ACTION=ping` só acorda o `/exec`. O Node repete a cada 3 min |
+| POST | `/api/leads/warm` | Por omissão `action=leads` sem `fresh=1` (enche a cache se o hit expirou e o Mini fica com essa lista). `LEADS_WARM_ACTION=ping` só acorda o `/exec`. O Node repete a cada 60s |
 | POST | `/api/sync/inbound-meta` | Já não importa CSV nem JSON. Devolve a contagem actual da folha |
 | POST | `/api/leads` | Acrescenta uma linha (nome, telefone, email, notas) |
 | GET | `/api/leads/:id` | Lê uma lead (`id` = número da linha) |

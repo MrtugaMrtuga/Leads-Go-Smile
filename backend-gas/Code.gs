@@ -17,7 +17,7 @@
  * getDisplayValues só das colunas mapeadas no bloco que passa o corte
  * (sheetRead=tail). A lista devolve só leads (rowsOmitted). O Mini não
  * precisa das linhas cruas.
- * CacheService guarda esse JSON 60s. Sem fresh=1, um hit não relê a folha.
+ * CacheService guarda esse JSON 300s. Sem fresh=1, um hit não relê a folha.
  * fresh=1 ignora a cache. update/create e um sync com inserções chamam
  * bumpLeadsCache_. action=ping não lê a folha.
  * Comentários: noteSet substitui o texto livre. noteAppend acrescenta uma
@@ -391,7 +391,7 @@ function readTable_(sheet) {
 }
 
 var LEADS_CACHE_KEY = 'leads-list-v3';
-var LEADS_CACHE_TTL_SEC = 60;
+var LEADS_CACHE_TTL_SEC = 300;
 var LEADS_GEN_KEY = 'LEADS_LIST_GEN';
 
 function isDate_(value) {
